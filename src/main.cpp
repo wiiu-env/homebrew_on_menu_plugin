@@ -68,6 +68,7 @@ ON_APPLICATION_START(args) {
     if(_SYSGetSystemApplicationTitleId(APP_ID_Updater) == OSGetTitleID()) {
         gHomebrewLaunched = FALSE;
     }
+
 }
 
 ON_APPLICATION_ENDING() {
@@ -82,6 +83,9 @@ void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXm
     DEBUG_FUNCTION_LINE("%s\n",buffer);
     strncpy(out_buf->longname_en,buffer,strlen(buffer));
     strncpy(out_buf->shortname_en,buffer,strlen(buffer));
+    out_buf->e_manual = 1;
+    out_buf->e_manual_version = 1;
+    out_buf->region = 0xFFFFFFFF;
 }
 
 DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t* outTitleCount, MCPTitleListType* titleList, uint32_t size) {
@@ -109,7 +113,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t* outTitleCount, 
 
         const char * indexedDevice = "mlc";
         strcpy(template_title.indexedDevice,indexedDevice);
-        template_title.appType = MCP_APP_TYPE_SystemApps;
+        template_title.appType = MCP_APP_TYPE_SystemApps; // for some reason we need to act like an system app.
         template_title.titleId = 0x0005000F00000000 + j;
         template_title.titleVersion = 1;
         template_title.groupId = 0x400;
@@ -151,15 +155,17 @@ DECL_FUNCTION(int32_t, MCP_GetTitleInfoByTitleAndDevice, uint32_t mcp_handle, ui
 }
 
 
-DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListType, uint32_t u1, uint32_t u2, uint32_t u3, uint32_t u4, uint32_t u5, uint32_t u6, uint32_t u7) {
-    DEBUG_FUNCTION_LINE("\n");
-    int result = real_ACPCheckTitleLaunchByTitleListType(u1, u2, u3, u4, u5, u6, u7);
+DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType* title, uint32_t u2) {
+    if(title->titleId & 0x0005000F00000000) {
+        DEBUG_FUNCTION_LINE("Started homebrew\n");
+        gHomebrewLaunched = TRUE;
+        fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32,(title->titleId & 0xFFFFFFFF), &gLaunchXML);
+        return 0;
+    }
 
-    gHomebrewLaunched = TRUE;
-    fillXmlForTitleID(0x0005000F,0x00000000, &gLaunchXML);
+    int result = real_ACPCheckTitleLaunchByTitleListTypeEx(title, u2);
+    return result;
 
-    DEBUG_FUNCTION_LINE("\n");
-    return 0;
 }
 
 int EndsWith(const char *str, const char *suffix) {
@@ -170,6 +176,17 @@ int EndsWith(const char *str, const char *suffix) {
     if (lensuffix >  lenstr)
         return 0;
     return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+}
+
+DECL_FUNCTION(void, FSInit) {
+    socket_lib_init();
+    log_init();
+    OSDynLoad_Module sModuleHandle = NULL;
+    OSDynLoad_Acquire("nn_acp.rpl", &sModuleHandle);
+    void *functionptr = NULL;
+    OSDynLoad_FindExport(sModuleHandle, FALSE, "ACPGetTitleMetaDir", &functionptr);
+    DEBUG_FUNCTION_LINE("%08X %08X\n",functionptr, OSEffectiveToPhysical((uint32_t)functionptr));
+    return real_FSInit();
 }
 
 DECL_FUNCTION(int, FSOpenFile, FSClient *pClient, FSCmdBlock *pCmd, char *path, const char *mode, int *handle, int error) {
@@ -190,6 +207,16 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *pClient, FSCmdBlock *pCmd, char *path, 
 DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t *buffer, uint32_t size, uint32_t count, FSFileHandle handle,uint32_t unk1, uint32_t flags) {
     FSStatus result = real_FSReadFile(client, block, buffer, size, count, handle, unk1, flags);
     DEBUG_FUNCTION_LINE("%08X %d\n", handle, result);
+    return result;
+}
+
+DECL_FUNCTION(FSStatus,FSBindMount,FSClient *client,
+              FSCmdBlock *cmd,
+              const char *source,
+              const char *target,
+              uint32_t flags) {
+    FSStatus result = real_FSBindMount(client, cmd, source, target, flags);
+    DEBUG_FUNCTION_LINE("%s %s %d\n", source,target, result);
     return result;
 }
 
@@ -304,23 +331,51 @@ DECL_FUNCTION(int32_t, ACPGetLaunchMetaXml, ACPMetaXml * metaxml) {
     return result;
 }
 
-DECL_FUNCTION(int32_t, PHYS_ACPGetTitleMetaXmlByDevice, uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml* metaxml, uint32_t device) {
+DECL_FUNCTION(int32_t, HBM_NN_ACP_ACPGetTitleMetaXmlByDevice, uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml* metaxml, uint32_t device) {
     if(gHomebrewLaunched) {
         memcpy(metaxml, &gLaunchXML, sizeof(gLaunchXML));
         return 0;
     }
-    int result = real_PHYS_ACPGetTitleMetaXmlByDevice(titleid_upper, titleid_lower, metaxml, device);
+    int result = real_HBM_NN_ACP_ACPGetTitleMetaXmlByDevice(titleid_upper, titleid_lower, metaxml, device);
 
     return result;
 }
 
-WUPS_MUST_REPLACE_PHYSICAL(PHYS_ACPGetTitleMetaXmlByDevice,  0x2E36CE44, 0x0E36CE44);
+DECL_FUNCTION(int32_t, EMANUAL_NN_ACP_ACPGetTitleMetaXml, uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml* metaxml, uint32_t device) {
+    DEBUG_FUNCTION_LINE("%08X %08X %08X %08X\n",titleid_upper,titleid_lower,metaxml,device);
+
+    if(gHomebrewLaunched) {
+        memcpy(metaxml, &gLaunchXML, sizeof(gLaunchXML));
+        return 0;
+    }
+    int result = real_EMANUAL_NN_ACP_ACPGetTitleMetaXml(titleid_upper, titleid_lower, metaxml, device);
+
+    return result;
+}
+
+DECL_FUNCTION(int32_t, EMANUAL_NN_ACP_ACPGetTitleMetaDir, uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml* metaxml, uint32_t device) {
+    DEBUG_FUNCTION_LINE("%08X %08X %08X %08X\n",titleid_upper,titleid_lower,metaxml,device);
+
+    if(gHomebrewLaunched) {
+        //memcpy(metaxml, &gLaunchXML, sizeof(gLaunchXML));
+        //return 0;
+    }
+    int result = real_EMANUAL_NN_ACP_ACPGetTitleMetaDir(titleid_upper, titleid_lower, metaxml, device);
+
+    return result;
+}
+
+WUPS_MUST_REPLACE_PHYSICAL(EMANUAL_NN_ACP_ACPGetTitleMetaDir,      0x4FA0A6F4, 0x0FA0A6F4);
+WUPS_MUST_REPLACE_PHYSICAL(EMANUAL_NN_ACP_ACPGetTitleMetaXml,      0x4FA0C280, 0x0FA0C280);
+WUPS_MUST_REPLACE_PHYSICAL(HBM_NN_ACP_ACPGetTitleMetaXmlByDevice,  0x2E36CE44, 0x0E36CE44);
+WUPS_MUST_REPLACE(FSInit,                            WUPS_LOADER_LIBRARY_COREINIT,       FSInit);
+WUPS_MUST_REPLACE(FSBindMount,                            WUPS_LOADER_LIBRARY_COREINIT,       FSBindMount);
 WUPS_MUST_REPLACE(FSReadDir,                            WUPS_LOADER_LIBRARY_COREINIT,       FSReadDir);
 WUPS_MUST_REPLACE(FSReadFile,                           WUPS_LOADER_LIBRARY_COREINIT,       FSReadFile);
 WUPS_MUST_REPLACE(FSOpenFile,                           WUPS_LOADER_LIBRARY_COREINIT,       FSOpenFile);
 WUPS_MUST_REPLACE(MCP_TitleList,                        WUPS_LOADER_LIBRARY_COREINIT,       MCP_TitleList);
 WUPS_MUST_REPLACE(MCP_GetTitleInfoByTitleAndDevice,     WUPS_LOADER_LIBRARY_COREINIT,       MCP_GetTitleInfoByTitleAndDevice );
-WUPS_MUST_REPLACE(ACPCheckTitleLaunchByTitleListType,   WUPS_LOADER_LIBRARY_NN_ACP,         ACPCheckTitleLaunchByTitleListType );
+WUPS_MUST_REPLACE(ACPCheckTitleLaunchByTitleListTypeEx,   WUPS_LOADER_LIBRARY_NN_ACP,         ACPCheckTitleLaunchByTitleListTypeEx );
 WUPS_MUST_REPLACE(ACPGetTitleMetaXmlByDevice,           WUPS_LOADER_LIBRARY_NN_ACP,         ACPGetTitleMetaXmlByDevice );
 WUPS_MUST_REPLACE(ACPGetLaunchMetaXml,                  WUPS_LOADER_LIBRARY_NN_ACP,         ACPGetLaunchMetaXml );
 WUPS_MUST_REPLACE(ACPGetTitleMetaDirByDevice,           WUPS_LOADER_LIBRARY_NN_ACP,         ACPGetTitleMetaDirByDevice );
