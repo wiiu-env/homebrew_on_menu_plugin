@@ -24,7 +24,7 @@
 #include "filelist.h"
 
 
-WUPS_PLUGIN_NAME("System Menu Launcher");
+WUPS_PLUGIN_NAME("Homebrew SysLauncher");
 WUPS_PLUGIN_DESCRIPTION("Allows the user to load homebrew from the System Menu");
 WUPS_PLUGIN_VERSION("0.1");
 WUPS_PLUGIN_AUTHOR("Maschell");
