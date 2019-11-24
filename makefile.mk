@@ -8,7 +8,7 @@ TARGET              := $(notdir $(CURDIR)).mod
 SOURCES             := src src/utils src/fs
 
 # Data directories
-DATA                :=	
+DATA                := data
 
 # Include directories
 INCLUDES            := src
@@ -47,4 +47,4 @@ EXTERNAL_LIBPATHS   :=
 # Will be added to the final include paths
 # -IC:/library1/include
 #---------------------------------------------------------------------------------
-EXTERNAL_INCLUDE    := -I$(WUT_ROOT)/include/libutilswut
+EXTERNAL_INCLUDE    := 

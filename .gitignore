@@ -1,2 +1,5 @@
 build/*
 *.mod
+sysapp.layout
+sysapp.cbp
+src/filelist.h

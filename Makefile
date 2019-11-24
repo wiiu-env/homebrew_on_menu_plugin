@@ -62,7 +62,7 @@ MACHDEP	= -DESPRESSO -mcpu=750 -meabi -mhard-float
 # -nostartfiles: Do not use the standard system startup files when linking
 # -ffunction-sections: split up functions so linker can garbage collect
 # -fdata-sections: split up data so linker can garbage collect
-COMMON_CFLAGS	:= -O2 -Wall $(MACHDEP)  -ffunction-sections -fdata-sections -Wl,-q  $(COMMON_CFLAGS)
+COMMON_CFLAGS	:= -O2 -Wall $(MACHDEP) -meabi -ffunction-sections -fdata-sections -Wl,-q  $(COMMON_CFLAGS)
 
 CFLAGS	        +=	-D__WIIU__ -D__WUT__
 
@@ -102,6 +102,7 @@ LIBDIRS	+=
 #---------------------------------------------------------------------------------
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 #---------------------------------------------------------------------------------
+FILELIST	:=	$(shell bash ./filelist.sh)
 export PROJECTDIR := $(CURDIR)
 export OUTPUT	:=	$(CURDIR)/$(TARGETDIR)/$(TARGET)
 export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
@@ -238,6 +239,11 @@ $(OUTPUT) : $(OFILES)
 %.ogg.o : %.ogg
 	@echo $(notdir $<)
 	@bin2s -a 32 $< | $(AS) -o $(@)
+#---------------------------------------------------------------------------------
+%.tga.o : %.tga
+	@echo $(notdir $<)
+	@bin2s -a 32 $< | $(AS) -o $(@)
+#---------------------------------------------------------------------------------
 
 ###############################################################################
 # Assembly listing rules
