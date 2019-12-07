@@ -120,7 +120,7 @@ static devoptab_t romFS_devoptab = {
 };
 
 static bool romfs_initialised = false;
-static romfs_mount romfs_mounts[32];
+static romfs_mount romfs_mounts[300];
 
 //-----------------------------------------------------------------------------
 

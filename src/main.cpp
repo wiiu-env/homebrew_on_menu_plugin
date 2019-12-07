@@ -1,5 +1,9 @@
 #include <wups.h>
+
+#include <zlib.h>
+#include <stdarg.h>
 #include <stdio.h>
+#include <exception>
 #include <string>
 #include <string.h>
 #include <stdlib.h>
@@ -24,6 +28,7 @@
 #include "filelist.h"
 
 
+
 WUPS_PLUGIN_NAME("Homebrew SysLauncher");
 WUPS_PLUGIN_DESCRIPTION("Allows the user to load homebrew from the System Menu");
 WUPS_PLUGIN_VERSION("0.1");
@@ -35,9 +40,23 @@ typedef struct WUT_PACKED FileInfos_ {
     char name[256];
     int32_t source;
     bool romfsMounted;
+    int openedFiles;
 } FileInfos;
 
-FileInfos gFileInfos[100] __attribute__((section(".data")));
+
+typedef struct{
+    bool inUse;
+    int fd;
+    bool compressed;
+    bool cInitDone;
+    bool cCloseDone;
+    z_stream strm;
+    unsigned char in[0x1000];
+} fileReadInformation;
+
+#define FILE_INFO_SIZE  300
+FileInfos gFileInfos[FILE_INFO_SIZE] __attribute__((section(".data")));
+fileReadInformation gFileReadInformation[32] __attribute__((section(".data")));
 ACPMetaXml gLaunchXML __attribute__((section(".data")));
 MCPTitleListType template_title __attribute__((section(".data")));
 BOOL gHomebrewLaunched __attribute__((section(".data")));
@@ -49,11 +68,66 @@ INITIALIZE_PLUGIN() {
     memset((void*) &template_title,0,sizeof(template_title));
     memset((void*) &gLaunchXML,0,sizeof(gLaunchXML));
     memset((void*) &gFileInfos,0,sizeof(gFileInfos));
+    memset((void*) &gFileReadInformation,0,sizeof(gFileReadInformation));
     gHomebrewLaunched = FALSE;
 }
 
-
 int EndsWith(const char *str, const char *suffix);
+
+void closeAllStreams() {
+    for(int i = 0; i<32; i++) {
+        if(gFileReadInformation[i].inUse != false) {
+
+        }
+    }
+}
+
+int fileReadInformation_getSlot() {
+    for(int i = 0; i<32; i++) {
+        if(gFileReadInformation[i].inUse == false) {
+            gFileReadInformation[i].inUse = true;
+            return i;
+        }
+    }
+    return -1;
+}
+
+void unmountRomfs(uint32_t id);
+
+int EndsWith(const char *str, const char *suffix) {
+    if (!str || !suffix)
+        return 0;
+    size_t lenstr = strlen(str);
+    size_t lensuffix = strlen(suffix);
+    if (lensuffix >  lenstr)
+        return 0;
+    return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+}
+
+bool mountRomfs(uint32_t id) {
+    if(id >= FILE_INFO_SIZE){
+        DEBUG_FUNCTION_LINE("HANDLE WAS TOO BIG\n");
+        return false;
+    }
+    if(!gFileInfos[id].romfsMounted) {
+        char buffer [256];
+        snprintf(buffer,256,"fs:/vol/external01/%s", gFileInfos[id].path);
+        char romName [10];
+        snprintf(romName,10,"%08X", id);
+        DEBUG_FUNCTION_LINE("Mount %s as %s\n", buffer, romName);
+        if(romfsMount(romName,buffer) == 0) {
+            DEBUG_FUNCTION_LINE("Mounted successfully \n");
+            gFileInfos[id].romfsMounted = true;
+            return true;
+        } else {
+            DEBUG_FUNCTION_LINE("Mounting failed\n");
+            return false;
+        }
+    }
+    return true;
+}
+
+
 
 void listdir(const char *name, int indent) {
     DEBUG_FUNCTION_LINE("Reading %s\n",name);
@@ -91,10 +165,14 @@ ON_APPLICATION_START(args) {
 
 void unmountAllRomfs();
 ON_APPLICATION_END() {
+    closeAllStreams();
     unmountAllRomfs();
 }
 
 void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml* out_buf) {
+    if(titleid_lower >= FILE_INFO_SIZE){
+        return;
+    }
     out_buf->title_id = ((uint64_t)titleid_upper * 0x100000000) + titleid_lower;
     strncpy(out_buf->longname_en,gFileInfos[titleid_lower].name,511);
     strncpy(out_buf->shortname_en,gFileInfos[titleid_lower].name,255);
@@ -175,6 +253,10 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t* outTitleCount, 
 
     int j = 0;
     for(int i = 0; i < dirList.GetFilecount(); i++) {
+        if(j >= FILE_INFO_SIZE){
+            DEBUG_FUNCTION_LINE("TOO MANY TITLES\n");
+            break;
+        }
         //! skip our own application in the listing
         if(strcasecmp(dirList.GetFilename(i), "homebrew_launcher.rpx") == 0) {
             continue;
@@ -206,7 +288,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t* outTitleCount, 
         strncpy(gFileInfos[j].name, dirList.GetFilename(i),255);
         gFileInfos[j].source = 0; //SD Card;
 
-        //DEBUG_FUNCTION_LINE("%s\n",gFileInfos[j].path);
+        DEBUG_FUNCTION_LINE("[%d] %s\n",j, gFileInfos[j].path);
 
         const char * indexedDevice = "mlc";
         strcpy(template_title.indexedDevice,indexedDevice);
@@ -226,6 +308,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t* outTitleCount, 
         template_title.unk0x60 = 0;
 
         memcpy(&(titleList[titlecount]), &template_title,sizeof(template_title));
+
         titlecount++;
         j++;
     }
@@ -263,15 +346,13 @@ LOAD_REQUEST;
 int32_t getRPXInfoForID(uint32_t id, romfs_fileInfo * info);
 
 DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType* title, uint32_t u2) {
-    DEBUG_FUNCTION_LINE("Started homebrew??\n");
-    if((title->titleId & 0x0005000F00000000) == 0x0005000F00000000) {
+    if((title->titleId & 0x0005000F00000000) == 0x0005000F00000000 && (uint32_t)(title->titleId & 0xFFFFFFFF) < FILE_INFO_SIZE) {
         DEBUG_FUNCTION_LINE("Started homebrew\n");
         gHomebrewLaunched = TRUE;
         fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32,(title->titleId & 0xFFFFFFFF), &gLaunchXML);
 
         LOAD_REQUEST request;
         memset(&request, 0, sizeof(request));
-
 
         request.command = 0xFC; // IPC_CUSTOM_LOAD_CUSTOM_RPX;
         request.target = 0;     // LOAD_FILE_TARGET_SD_CARD
@@ -284,7 +365,6 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType* t
             request.filesize = ((uint32_t*)&info.length)[1];
             request.fileoffset = ((uint32_t*)&info.offset)[1];
         }
-        DEBUG_FUNCTION_LINE("%d\n", res);
 
         strncpy(request.path, gFileInfos[(uint32_t)(title->titleId & 0xFFFFFFFF)].path, 255);
 
@@ -306,49 +386,56 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType* t
 
 }
 
-int EndsWith(const char *str, const char *suffix) {
-    if (!str || !suffix)
-        return 0;
-    size_t lenstr = strlen(str);
-    size_t lensuffix = strlen(suffix);
-    if (lensuffix >  lenstr)
-        return 0;
-    return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
-}
-
-bool mountRomfs(uint32_t id) {
-    if(!gFileInfos[id].romfsMounted) {
-        char buffer [256];
-        snprintf(buffer,256,"fs:/vol/external01/%s", gFileInfos[id].path);
-        char romName [10];
-        snprintf(romName,10,"%08X", id);
-        DEBUG_FUNCTION_LINE("Mount %s as %s\n", buffer, romName);
-        if(romfsMount(romName,buffer) == 0) {
-            DEBUG_FUNCTION_LINE("Mounted successfully \n");
-            gFileInfos[id].romfsMounted = true;
-            return true;
-        } else {
-            return false;
-        }
-    }
-    return true;
-}
 
 void unmountRomfs(uint32_t id) {
+    if(id >= FILE_INFO_SIZE){
+        return;
+    }
     if(gFileInfos[id].romfsMounted) {
         char romName [10];
         snprintf(romName,10,"%08X", id);
-        //DEBUG_FUNCTION_LINE("Unmounting %s\n", romName);
+        DEBUG_FUNCTION_LINE("Unmounting %s\n", romName);
         int res = romfsUnmount(romName);
-        //DEBUG_FUNCTION_LINE("res: %d\n",res);
+        DEBUG_FUNCTION_LINE("res: %d\n",res);
         gFileInfos[id].romfsMounted = false;
     }
 }
 
 void unmountAllRomfs() {
-    for(int i = 0; i < 100; i++) {
+    for(int i = 0; i < FILE_INFO_SIZE; i++) {
         unmountRomfs(i);
     }
+}
+
+
+bool file_exist (char *filename) {
+    struct stat   buffer;
+    return (stat (filename, &buffer) == 0);
+}
+
+
+bool initCompressedFileReadInformation(fileReadInformation * info){
+    if(info == NULL || !info->compressed){
+        info->cInitDone = false;
+        return false;
+    }
+    if(info->cInitDone){
+        return true;
+    }
+    /* allocate inflate state */
+    info->strm.zalloc = Z_NULL;
+    info->strm.zfree = Z_NULL;
+    info->strm.opaque = Z_NULL;
+    info->strm.avail_in = 0;
+    info->strm.next_in = Z_NULL;
+    int ret = inflateInit2(&info->strm, MAX_WBITS | 16); //gzip
+    if (ret != Z_OK){
+        DEBUG_FUNCTION_LINE("ret != Z_OK\n");
+        info->cInitDone = false;
+        return false;
+    }
+    info->cInitDone = true;
+    return true;
 }
 
 int32_t FSOpenFile_for_ID(uint32_t id, const char * filepath, int * handle) {
@@ -374,14 +461,54 @@ int32_t FSOpenFile_for_ID(uint32_t id, const char * filepath, int * handle) {
     test[j++] = 0;
 
     char buffer [256];
-    snprintf(buffer,256,"%s:/%s",romName, test);
+    snprintf(buffer,256,"%s:/%s.gz",romName, test);
+
+    bool nonCompressed = false;
+    if(!file_exist(buffer)) {
+        snprintf(buffer,256,"%s:/%s",romName, test);
+        if(!file_exist(buffer)) {
+            return -3;
+        }
+        nonCompressed = true;
+    }
 
     int fd = open(buffer,0);
     if(fd >= 0) {
         DEBUG_FUNCTION_LINE("Opened %s from %s \n",buffer, romName );
-        *handle = 0xFF000000 + fd;
+        int slot = fileReadInformation_getSlot();
+        if(slot < 0){
+            return -5;
+        }
+        fileReadInformation * info = &gFileReadInformation[slot];
+        info->fd = fd;
+        if(!nonCompressed){
+            info->compressed = true;
+            initCompressedFileReadInformation(info);
+            DEBUG_FUNCTION_LINE("Init compressed, got slot %d\n", slot);
+        }else{
+            info->cInitDone = true;
+        }
+        *handle = 0xFF000000 + slot;
         return 0;
     }
+
+
+    /*
+    DEBUG_FUNCTION_LINE("OPENING %s\n", buffer);
+
+    std::istream* is = new zstr::ifstream(buffer);
+     DEBUG_FUNCTION_LINE("OPENED %s\n", buffer);
+    if(is != NULL) {
+        for(int i = 0; i<100; i++) {
+            if(gFileHandleToStream[i] == NULL) {
+                DEBUG_FUNCTION_LINE("Set stream to id %d\n",i);
+                gFileHandleToStream[i] = is;
+                *handle = 0xFF000000 + i;
+                return 0;
+            }
+        }
+    }
+    DEBUG_FUNCTION_LINE("Failed to find handle \n");*/
 
     return -2;
 }
@@ -432,8 +559,8 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
             int res = FS_STATUS_NOT_FOUND;
             if(EndsWith(path,iconTex)) {
                 // fallback to dummy icon if loaded homebrew is no .wbf
-                *handle = 0x1337;
-                res = FS_STATUS_OK;
+                //*handle = 0x1337;
+                res = FS_STATUS_NOT_FOUND;
             }
 
             uint32_t val;
@@ -452,17 +579,130 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
     return result;
 }
 
+bool DeInitFile(int slot){
+    if(gFileReadInformation[slot].compressed && gFileReadInformation[slot].cInitDone){
+        /* clean up and return */
+        (void)inflateEnd(&(gFileReadInformation[slot].strm));
+    }
+
+    close(gFileReadInformation[slot].fd);
+    gFileReadInformation[slot].inUse = false;
+    memset(&gFileReadInformation[slot],0, sizeof(fileReadInformation));
+    return true;
+}
+
+
 DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFileHandle handle, uint32_t flags) {
     if(handle == 0x1337) {
-        return FS_STATUS_OK;
+        //return FS_STATUS_OK;
     }
     if((handle & 0xFF000000) == 0xFF000000) {
         int32_t fd = (handle & 0x00FFFFFF);
-        close(fd);
+        DEBUG_FUNCTION_LINE("Close %d\n", fd);
+        DeInitFile(fd);
+        unmountAllRomfs();
         return FS_STATUS_OK;
     }
     return real_FSCloseFile(client,block,handle,flags);
 }
+
+
+bool initFile(int slot){
+    if(gFileReadInformation[slot].compressed && !gFileReadInformation[slot].cInitDone){
+        initCompressedFileReadInformation(&gFileReadInformation[slot]);
+        if(!gFileReadInformation[slot].cInitDone){
+            DEBUG_FUNCTION_LINE("Failed to init\n");
+            return false;
+        }
+    }
+    return true;
+}
+
+
+
+int readFile(int slot, uint8_t * buffer, uint32_t size){
+    fileReadInformation * info = &gFileReadInformation[slot];
+    if(!info->compressed){
+        //DEBUG_FUNCTION_LINE("non compressed\n");
+        return read(info->fd, buffer, size);
+    }else{
+        int startValue = info->strm.total_out;
+        int newSize = 0;
+        int ret = 0;
+        //DEBUG_FUNCTION_LINE("We want to read %d\n", size);
+        //DEBUG_FUNCTION_LINE("startValue %d \n",startValue);
+        do {
+            int CHUNK = 0x1000;
+            int nextOut = CHUNK;
+            if(nextOut > size){
+                nextOut = size;
+            }
+            //DEBUG_FUNCTION_LINE("nextOut = %d\n",nextOut);
+            if(info->strm.avail_in == 0){
+                //DEBUG_FUNCTION_LINE("Reading %d from compressed stream\n",CHUNK);
+                info->strm.avail_in = read(info->fd, info->in, CHUNK);
+                if (info->strm.avail_in == 0){
+                    DEBUG_FUNCTION_LINE("strm.avail_in is 0\n");
+                    break;
+                }
+                info->strm.next_in = info->in;
+            }
+            //DEBUG_FUNCTION_LINE("info->strm.avail_in = %d\n",info->strm.avail_in);
+            //DEBUG_FUNCTION_LINE("info->strm.next_in = %d\n",info->strm.next_in);
+
+            /* run inflate() on input until output buffer not full */
+            do {
+                //DEBUG_FUNCTION_LINE("newSize %d, size %d, info->strm.avail_out %d\n", newSize, size, info->strm.avail_out);
+
+                if(nextOut > size - newSize){
+                    nextOut = size - newSize;
+                }
+
+                info->strm.avail_out = nextOut;
+                //DEBUG_FUNCTION_LINE("info->strm.avail_out = %d\n",info->strm.avail_out);
+                info->strm.next_out = (buffer + newSize);
+                //DEBUG_FUNCTION_LINE("info->strm.next_out = %08X\n",info->strm.next_out);
+                ret = inflate(&info->strm, Z_NO_FLUSH);
+                //DEBUG_FUNCTION_LINE("ret = %d\n",ret);
+                if(ret == Z_STREAM_ERROR){
+                    DEBUG_FUNCTION_LINE("Z_STREAM_ERROR\n");
+                    return (FSStatus)0;
+                }
+
+                switch (ret) {
+                case Z_NEED_DICT:
+                    DEBUG_FUNCTION_LINE("Z_NEED_DICT\n");
+                    ret = Z_DATA_ERROR;     /* and fall through */
+                case Z_DATA_ERROR:
+                case Z_MEM_ERROR:
+                    DEBUG_FUNCTION_LINE("Z_MEM_ERROR or Z_DATA_ERROR\n");
+                    (void)inflateEnd(&info->strm);
+                    return (FSStatus) ret;
+                }
+
+                int canBeWritten = CHUNK - info->strm.avail_out;
+                //DEBUG_FUNCTION_LINE("canBeWritten = %d\n",canBeWritten);
+
+                newSize = info->strm.total_out - startValue;
+                if(newSize == size){
+                    //DEBUG_FUNCTION_LINE("newSize was as wanted %d\n", newSize);
+                    break;
+                }
+                nextOut = CHUNK;
+                if(newSize + nextOut >= (size)){
+                    nextOut = (size) - newSize;
+                }
+                //DEBUG_FUNCTION_LINE("newSize = %d\n",newSize);
+                //DEBUG_FUNCTION_LINE("nextOut = %d\n",nextOut);
+            } while (info->strm.avail_out == 0 && newSize < (size));
+
+            /* done when inflate() says it's done */
+        } while (ret != Z_STREAM_END && newSize < size);
+
+        return newSize;
+    }
+}
+
 
 DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t *buffer, uint32_t size, uint32_t count, FSFileHandle handle,uint32_t unk1, uint32_t flags) {
     if(handle == 0x1337) {
@@ -475,7 +715,12 @@ DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t
     }
     if((handle & 0xFF000000) == 0xFF000000) {
         int32_t fd = (handle & 0x00FFFFFF);
-        return (FSStatus)(read(fd, buffer, size*count) /size);
+
+        initFile(fd);
+        int readSize = readFile(fd, buffer, (size*count));
+
+        //DEBUG_FUNCTION_LINE("READ %d from %d result %d\n", size*count, fd, readSize);
+        return (FSStatus)(readSize / size);
     }
     FSStatus result = real_FSReadFile(client, block, buffer, size, count, handle, unk1, flags);
     return result;
@@ -538,7 +783,6 @@ DECL_FUNCTION(uint32_t, PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg, uint32_t *
         param[3] = (uint32_t) (0x00000000FFFFFFFF & titleID);
     }
     uint32_t result = real_PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg(param);
-    DEBUG_FUNCTION_LINE("%08X\n", result);
     return result;
 }
 
