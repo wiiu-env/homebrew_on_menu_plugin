@@ -209,3 +209,82 @@ std::vector<std::string> StringTools::stringSplit(const std::string & inValue, c
     }
     return result;
 }
+
+
+const char * StringTools::FullpathToFilename(const char *path) {
+        if(!path)
+            return path;
+
+        const char * ptr = path;
+        const char * Filename = ptr;
+
+        while(*ptr != '\0') {
+            if(ptr[0] == '/' && ptr[1] != '\0')
+                Filename = ptr+1;
+
+            ++ptr;
+        }
+
+        return Filename;
+    }
+
+void StringTools::RemoveDoubleSlashs(std::string &str) {
+        uint32_t length = str.size();
+
+        //! clear path of double slashes
+        for(uint32_t i = 1; i < length; ++i) {
+            if(str[i-1] == '/' && str[i] == '/') {
+                str.erase(i, 1);
+                i--;
+                length--;
+            }
+        }
+    }
+
+
+// You must free the result if result is non-NULL.
+char * StringTools::str_replace(char *orig, char *rep, char *with) {
+    char *result; // the return string
+    char *ins;    // the next insert point
+    char *tmp;    // varies
+    int len_rep;  // length of rep (the string to remove)
+    int len_with; // length of with (the string to replace rep with)
+    int len_front; // distance between rep and end of last rep
+    int count;    // number of replacements
+
+    // sanity checks and initialization
+    if (!orig || !rep)
+        return NULL;
+    len_rep = strlen(rep);
+    if (len_rep == 0)
+        return NULL; // empty rep causes infinite loop during count
+    if (!with)
+        with = "";
+    len_with = strlen(with);
+
+    // count the number of replacements needed
+    ins = orig;
+    for (count = 0; tmp = strstr(ins, rep); ++count) {
+        ins = tmp + len_rep;
+    }
+
+    tmp = result = (char*)malloc(strlen(orig) + (len_with - len_rep) * count + 1);
+
+    if (!result)
+        return NULL;
+
+    // first time through the loop, all the variable are set correctly
+    // from here on,
+    //    tmp points to the end of the result string
+    //    ins points to the next occurrence of rep in orig
+    //    orig points to the remainder of orig after "end of rep"
+    while (count--) {
+        ins = strstr(orig, rep);
+        len_front = ins - orig;
+        tmp = strncpy(tmp, orig, len_front) + len_front;
+        tmp = strcpy(tmp, with) + len_with;
+        orig += len_front + len_rep; // move to next "end of rep"
+    }
+    strcpy(tmp, orig);
+    return result;
+}

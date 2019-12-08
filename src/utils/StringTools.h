@@ -42,37 +42,9 @@ public:
     static BOOL char2wchar_t(const char * src, wchar_t * dest);
     static int32_t strtokcmp(const char * string, const char * compare, const char * separator);
     static int32_t strextcmp(const char * string, const char * extension, char seperator);
-
-    static const char * FullpathToFilename(const char *path) {
-        if(!path)
-            return path;
-
-        const char * ptr = path;
-        const char * Filename = ptr;
-
-        while(*ptr != '\0') {
-            if(ptr[0] == '/' && ptr[1] != '\0')
-                Filename = ptr+1;
-
-            ++ptr;
-        }
-
-        return Filename;
-    }
-
-    static void RemoveDoubleSlashs(std::string &str) {
-        uint32_t length = str.size();
-
-        //! clear path of double slashes
-        for(uint32_t i = 1; i < length; ++i) {
-            if(str[i-1] == '/' && str[i] == '/') {
-                str.erase(i, 1);
-                i--;
-                length--;
-            }
-        }
-    }
-
+    static char *str_replace(char *orig, char *rep, char *with);
+    static const char * FullpathToFilename(const char *path);
+    static void RemoveDoubleSlashs(std::string &str);
     static std::vector<std::string> stringSplit(const std::string & value, const std::string & splitter);
 };
 
