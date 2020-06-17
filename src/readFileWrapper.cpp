@@ -16,13 +16,13 @@ int readFile(int slot, uint8_t *buffer, uint32_t size) {
         return read(info->fd, buffer, size);
     } else {
         int startValue = info->strm.total_out;
-        int newSize = 0;
+        uint32_t newSize = 0;
         int ret = 0;
         //DEBUG_FUNCTION_LINE("We want to read %d\n", size);
         //DEBUG_FUNCTION_LINE("startValue %d \n",startValue);
         do {
             int CHUNK = 0x1000;
-            int nextOut = CHUNK;
+            uint32_t nextOut = CHUNK;
             if (nextOut > size) {
                 nextOut = size;
             }
@@ -69,7 +69,7 @@ int readFile(int slot, uint8_t *buffer, uint32_t size) {
                         return ret;
                 }
 
-                int canBeWritten = CHUNK - info->strm.avail_out;
+                //int canBeWritten = CHUNK - info->strm.avail_out;
                 //DEBUG_FUNCTION_LINE("canBeWritten = %d\n",canBeWritten);
 
                 newSize = info->strm.total_out - startValue;
@@ -151,7 +151,7 @@ bool initCompressedFileReadInformation(fileReadInformation *info) {
 }
 
 
-int32_t loadFileIntoBuffer(uint32_t id, char *filepath, char *buffer, int sizeToRead) {
+int32_t loadFileIntoBuffer(uint32_t id, const char *filepath, char *buffer, int sizeToRead) {
     if (!mountRomfs(id)) {
         return -1;
     }

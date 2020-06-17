@@ -37,6 +37,7 @@ WUPS_PLUGIN_AUTHOR("Maschell");
 WUPS_PLUGIN_LICENSE("GPL");
 
 #define UPPER_TITLE_ID_HOMEBREW 0x0005000F
+#define TITLE_ID_HOMEBREW_MASK (((uint64_t) UPPER_TITLE_ID_HOMEBREW) << 16)
 
 char gIconCache[65580] __attribute__((section(".data")));
 ACPMetaXml gLaunchXML __attribute__((section(".data")));
@@ -165,7 +166,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
             // System apps don't have a splash screen.
             template_title.appType = MCP_APP_TYPE_SYSTEM_APPS;
         }
-        template_title.titleId = UPPER_TITLE_ID_HOMEBREW << 16 | gFileInfos[j].lowerTitleID;
+        template_title.titleId = TITLE_ID_HOMEBREW_MASK | gFileInfos[j].lowerTitleID;
         template_title.titleVersion = 1;
         template_title.groupId = 0x400;
 
@@ -193,7 +194,7 @@ DECL_FUNCTION(int32_t, MCP_GetTitleInfoByTitleAndDevice, uint32_t mcp_handle, ui
         char buffer[25];
         snprintf(buffer, 25, "/custom/%08X%08X", titleid_upper, titleid_lower_2);
         strcpy(template_title.path, buffer);
-        template_title.titleId = UPPER_TITLE_ID_HOMEBREW << 16 | titleid_lower_1;
+        template_title.titleId = TITLE_ID_HOMEBREW_MASK | titleid_lower_1;
         memcpy(title, &(template_title), sizeof(MCPTitleListType));
         return 0;
     }
@@ -213,7 +214,7 @@ typedef struct __attribute((packed)) {
 int32_t getRPXInfoForID(uint32_t id, romfs_fileInfo *info);
 
 DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *title, uint32_t u2) {
-    if ((title->titleId & (UPPER_TITLE_ID_HOMEBREW << 16)) == (UPPER_TITLE_ID_HOMEBREW << 16)) {
+    if ((title->titleId & TITLE_ID_HOMEBREW_MASK) == TITLE_ID_HOMEBREW_MASK) {
         int32_t id = getIDByLowerTitleID(title->titleId & 0xFFFFFFFF);
         if (id > 0) {
             DEBUG_FUNCTION_LINE("Started homebrew\n");
@@ -261,10 +262,10 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
 }
 
 DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, const char *mode, int *handle, int error) {
-    char *start = "/vol/storage_mlc01/sys/title/0005000F";
-    char *icon = ".tga";
-    char *iconTex = "iconTex.tga";
-    char *sound = ".btsnd";
+    const char *start = "/vol/storage_mlc01/sys/title/0005000F";
+    const char *icon = ".tga";
+    const char *iconTex = "iconTex.tga";
+    const char *sound = ".btsnd";
 
     if (StringTools::EndsWith(path, icon) || StringTools::EndsWith(path, sound)) {
         if (strncmp(path, start, strlen(start)) == 0) {
@@ -325,7 +326,7 @@ DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFile
 
 DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t *buffer, uint32_t size, uint32_t count, FSFileHandle handle, uint32_t unk1, uint32_t flags) {
     if (handle == 0x13371337) {
-        int cpySize = size * count;
+        uint32_t cpySize = size * count;
         if (sizeof(gIconCache) < cpySize) {
             cpySize = sizeof(gIconCache);
         }
