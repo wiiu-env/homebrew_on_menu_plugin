@@ -20,6 +20,11 @@
 #include "romfs_helper.h"
 #include "filelist.h"
 
+struct _ACPMetaData {
+    char bootmovie[80696];
+    char bootlogo[28604];
+} _ACPMetaData;
+
 WUPS_PLUGIN_NAME("Homebrew SysLauncher");
 WUPS_PLUGIN_DESCRIPTION("Allows the user to load homebrew from the System Menu");
 WUPS_PLUGIN_VERSION("0.1");
@@ -432,7 +437,19 @@ DECL_FUNCTION(int32_t, HBM_NN_ACP_ACPGetTitleMetaXmlByDevice, uint32_t titleid_u
     return result;
 }
 
-WUPS_MUST_REPLACE_PHYSICAL(HBM_NN_ACP_ACPGetTitleMetaXmlByDevice, 0x2E36CE44, 0x0E36CE44);
+
+DECL_FUNCTION(uint32_t, ACPGetLaunchMetaData, struct _ACPMetaData *metadata) {
+    uint32_t result = real_ACPGetLaunchMetaData(metadata);
+
+    if (gHomebrewLaunched) {
+        memcpy(metadata->bootmovie, bootMovie_h264, bootMovie_h264_size);
+        memcpy(metadata->bootlogo, bootLogoTex_tga, bootLogoTex_tga_size);
+    }
+
+    return result;
+}
+
+// WUPS_MUST_REPLACE_PHYSICAL(HBM_NN_ACP_ACPGetTitleMetaXmlByDevice, 0x2E36CE44, 0x0E36CE44);
 WUPS_MUST_REPLACE(ACPGetApplicationBox, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetApplicationBox);
 WUPS_MUST_REPLACE(PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg, WUPS_LOADER_LIBRARY_DRMAPP, PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg);
 WUPS_MUST_REPLACE(MCP_RightCheckLaunchable, WUPS_LOADER_LIBRARY_COREINIT, MCP_RightCheckLaunchable);
@@ -448,3 +465,4 @@ WUPS_MUST_REPLACE(ACPGetTitleMetaXmlByDevice, WUPS_LOADER_LIBRARY_NN_ACP, ACPGet
 WUPS_MUST_REPLACE(ACPGetLaunchMetaXml, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetLaunchMetaXml);
 WUPS_MUST_REPLACE(ACPGetTitleMetaDirByDevice, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetTitleMetaDirByDevice);
 WUPS_MUST_REPLACE(_SYSLaunchTitleByPathFromLauncher, WUPS_LOADER_LIBRARY_SYSAPP, _SYSLaunchTitleByPathFromLauncher);
+WUPS_MUST_REPLACE(ACPGetLaunchMetaData, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetLaunchMetaData);
