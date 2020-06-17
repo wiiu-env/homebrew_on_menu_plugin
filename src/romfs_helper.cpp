@@ -6,6 +6,15 @@
 
 FileInfos gFileInfos[FILE_INFO_SIZE] __attribute__((section(".data")));
 
+int32_t getIDByLowerTitleID(uint32_t lowerTitleID) {
+    for (int i = 0; i < FILE_INFO_SIZE; i++) {
+        if (strlen(gFileInfos[i].path) > 0 && gFileInfos[i].lowerTitleID == lowerTitleID) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void unmountRomfs(uint32_t id) {
     if (id >= FILE_INFO_SIZE) {
         return;

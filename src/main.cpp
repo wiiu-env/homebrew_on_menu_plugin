@@ -98,6 +98,18 @@ void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXm
     strncpy(out_buf->company_code, "0001", strlen("0001") + 1);
 }
 
+/* hash: compute hash value of string */
+unsigned int hash(char *str) {
+    unsigned int h;
+    unsigned char *p;
+
+    h = 0;
+    for (p = (unsigned char *) str; *p != '\0'; p++) {
+        h = 37 * h + *p;
+    }
+    return h; // or, h % ARRAY_SIZE;
+}
+
 DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, MCPTitleListType *titleList, uint32_t size) {
     int32_t result = real_MCP_TitleList(handle, outTitleCount, titleList, size);
     uint32_t titlecount = *outTitleCount;
@@ -142,7 +154,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
         strncpy(gFileInfos[j].name, dirList.GetFilename(i), 255);
         gFileInfos[j].source = 0; //SD Card;
 
-        DEBUG_FUNCTION_LINE("[%d] %s\n", j, gFileInfos[j].path);
+        gFileInfos[j].lowerTitleID = hash(gFileInfos[j].path);
 
         const char *indexedDevice = "mlc";
         strcpy(template_title.indexedDevice, indexedDevice);
@@ -160,6 +172,8 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
         template_title.osVersion = OSGetOSID();
         template_title.sdkVersion = __OSGetProcessSDKVersion();
         template_title.unk0x60 = 0;
+
+        DEBUG_FUNCTION_LINE("[%d] %s [%016llX]\n", j, gFileInfos[j].path, template_title.titleId);
 
         memcpy(&(titleList[titlecount]), &template_title, sizeof(template_title));
 
@@ -199,41 +213,46 @@ typedef struct __attribute((packed)) {
 int32_t getRPXInfoForID(uint32_t id, romfs_fileInfo *info);
 
 DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *title, uint32_t u2) {
-    if ((title->titleId & (UPPER_TITLE_ID_HOMEBREW << 16)) == (UPPER_TITLE_ID_HOMEBREW << 16) && (uint32_t) (title->titleId & 0xFFFFFFFF) < FILE_INFO_SIZE) {
-        DEBUG_FUNCTION_LINE("Started homebrew\n");
-        gHomebrewLaunched = TRUE;
-        fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32, (title->titleId & 0xFFFFFFFF), &gLaunchXML);
+    if ((title->titleId & (UPPER_TITLE_ID_HOMEBREW << 16)) == (UPPER_TITLE_ID_HOMEBREW << 16)) {
+        int32_t id = getIDByLowerTitleID(title->titleId & 0xFFFFFFFF);
+        if (id > 0) {
+            DEBUG_FUNCTION_LINE("Started homebrew\n");
+            gHomebrewLaunched = TRUE;
+            fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32, (title->titleId & 0xFFFFFFFF), &gLaunchXML);
 
-        LOAD_REQUEST request;
-        memset(&request, 0, sizeof(request));
+            LOAD_REQUEST request;
+            memset(&request, 0, sizeof(request));
 
-        request.command = 0xFC; // IPC_CUSTOM_LOAD_CUSTOM_RPX;
-        request.target = 0;     // LOAD_FILE_TARGET_SD_CARD
-        request.filesize = 0;   // unknown
-        request.fileoffset = 0; //
+            request.command = 0xFC; // IPC_CUSTOM_LOAD_CUSTOM_RPX;
+            request.target = 0;     // LOAD_FILE_TARGET_SD_CARD
+            request.filesize = 0;   // unknown
+            request.fileoffset = 0; //
 
-        romfs_fileInfo info;
-        int res = getRPXInfoForID((title->titleId & 0xFFFFFFFF), &info);
-        if (res >= 0) {
-            request.filesize = ((uint32_t *) &info.length)[1];
-            request.fileoffset = ((uint32_t *) &info.offset)[1];
-            loadFileIntoBuffer((title->titleId & 0xFFFFFFFF), "meta/iconTex.tga", gIconCache, sizeof(gIconCache));
+            romfs_fileInfo info;
+            int res = getRPXInfoForID((title->titleId & 0xFFFFFFFF), &info);
+            if (res >= 0) {
+                request.filesize = ((uint32_t *) &info.length)[1];
+                request.fileoffset = ((uint32_t *) &info.offset)[1];
+                loadFileIntoBuffer((title->titleId & 0xFFFFFFFF), "meta/iconTex.tga", gIconCache, sizeof(gIconCache));
+            }
+
+            strncpy(request.path, gFileInfos[(uint32_t) (title->titleId & 0xFFFFFFFF)].path, 255);
+
+
+            DEBUG_FUNCTION_LINE("Loading file %s size: %08X offset: %08X\n", request.path, request.filesize, request.fileoffset);
+
+            DCFlushRange(&request, sizeof(LOAD_REQUEST));
+
+            int mcpFd = IOS_Open("/dev/mcp", (IOSOpenMode) 0);
+            if (mcpFd >= 0) {
+                int out = 0;
+                IOS_Ioctl(mcpFd, 100, &request, sizeof(request), &out, sizeof(out));
+                IOS_Close(mcpFd);
+            }
+            return 0;
+        } else {
+            DEBUG_FUNCTION_LINE("Failed to get the id for titleID %016llX", title->titleId);
         }
-
-        strncpy(request.path, gFileInfos[(uint32_t) (title->titleId & 0xFFFFFFFF)].path, 255);
-
-
-        DEBUG_FUNCTION_LINE("Loading file %s size: %08X offset: %08X\n", request.path, request.filesize, request.fileoffset);
-
-        DCFlushRange(&request, sizeof(LOAD_REQUEST));
-
-        int mcpFd = IOS_Open("/dev/mcp", (IOSOpenMode) 0);
-        if (mcpFd >= 0) {
-            int out = 0;
-            IOS_Ioctl(mcpFd, 100, &request, sizeof(request), &out, sizeof(out));
-            IOS_Close(mcpFd);
-        }
-        return 0;
     }
 
     int result = real_ACPCheckTitleLaunchByTitleListTypeEx(title, u2);
