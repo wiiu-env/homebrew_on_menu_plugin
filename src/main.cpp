@@ -132,10 +132,6 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
             continue;
         }
 
-        char buffer[25];
-        snprintf(buffer, 25, "/custom/%08X%08X", UPPER_TITLE_ID_HOMEBREW, j);
-        strcpy(template_title.path, buffer);
-
         char *repl = (char *) "fs:/vol/external01/";
         char *with = (char *) "";
         char *input = (char *) dirList.GetFilepath(i);
@@ -146,15 +142,18 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
             free(path);
         }
 
+        gFileInfos[j].lowerTitleID = hash(gFileInfos[j].path);
+
+        char buffer[25];
+        snprintf(buffer, 25, "/custom/%08X%08X", UPPER_TITLE_ID_HOMEBREW, gFileInfos[j].lowerTitleID);
+        strcpy(template_title.path, buffer);
+
         strncpy(gFileInfos[j].name, dirList.GetFilename(i), 255);
         gFileInfos[j].source = 0; //SD Card;
-
-        gFileInfos[j].lowerTitleID = hash(gFileInfos[j].path);
 
         const char *indexedDevice = "mlc";
         strcpy(template_title.indexedDevice, indexedDevice);
         if (StringTools::EndsWith(gFileInfos[j].name, ".wbf")) {
-
             template_title.appType = MCP_APP_TYPE_GAME;
         } else {
             // System apps don't have a splash screen.
