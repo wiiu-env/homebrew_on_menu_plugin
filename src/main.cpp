@@ -68,7 +68,7 @@ ON_APPLICATION_END() {
 
 void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *out_buf) {
     int32_t id = getIDByLowerTitleID(titleid_lower);
-    if(id < 0){
+    if (id < 0) {
         DEBUG_FUNCTION_LINE("Failed to get id by titleid\n");
         return;
     }
@@ -282,7 +282,7 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
             sscanf(id, "%08X", &lowerTitleID);
             int32_t idVal = getIDByLowerTitleID(lowerTitleID);
             if (idVal < 0) {
-                DEBUG_FUNCTION_LINE("Failed to find id for titleID %08X\n",lowerTitleID);
+                DEBUG_FUNCTION_LINE("Failed to find id for titleID %08X\n", lowerTitleID);
             } else {
                 if (FSOpenFile_for_ID(idVal, ending, handle) < 0) {
                     return res;
