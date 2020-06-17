@@ -36,7 +36,6 @@ WUPS_PLUGIN_VERSION("0.1");
 WUPS_PLUGIN_AUTHOR("Maschell");
 WUPS_PLUGIN_LICENSE("GPL");
 
-
 char gIconCache[65580] __attribute__((section(".data")));
 ACPMetaXml gLaunchXML __attribute__((section(".data")));
 MCPTitleListType template_title __attribute__((section(".data")));
@@ -52,7 +51,6 @@ INITIALIZE_PLUGIN() {
     memset((void *) &gIconCache, 0, sizeof(gIconCache));
     gHomebrewLaunched = FALSE;
 }
-
 
 ON_APPLICATION_START(args) {
     socket_lib_init();
@@ -194,8 +192,7 @@ typedef struct __attribute((packed)) {
     uint32_t filesize;
     uint32_t fileoffset;
     char path[256];
-}
-        LOAD_REQUEST;
+} LOAD_REQUEST;
 
 int32_t getRPXInfoForID(uint32_t id, romfs_fileInfo *info);
 
@@ -284,7 +281,6 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
     return result;
 }
 
-
 DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFileHandle handle, uint32_t flags) {
     if (handle == 0x13371337) {
         return FS_STATUS_OK;
@@ -305,7 +301,6 @@ DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFile
     }
     return real_FSCloseFile(client, block, handle, flags);
 }
-
 
 DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t *buffer, uint32_t size, uint32_t count, FSFileHandle handle, uint32_t unk1, uint32_t flags) {
     if (handle == 0x13371337) {
