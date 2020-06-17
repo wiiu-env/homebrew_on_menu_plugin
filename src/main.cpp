@@ -36,6 +36,8 @@ WUPS_PLUGIN_VERSION("0.1");
 WUPS_PLUGIN_AUTHOR("Maschell");
 WUPS_PLUGIN_LICENSE("GPL");
 
+#define UPPER_TITLE_ID_HOMEBREW 0x0005000F
+
 char gIconCache[65580] __attribute__((section(".data")));
 ACPMetaXml gLaunchXML __attribute__((section(".data")));
 MCPTitleListType template_title __attribute__((section(".data")));
@@ -124,7 +126,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
         }
 
         char buffer[25];
-        snprintf(buffer, 25, "/custom/%08X%08X", 0x0005000F, j);
+        snprintf(buffer, 25, "/custom/%08X%08X", UPPER_TITLE_ID_HOMEBREW, j);
         strcpy(template_title.path, buffer);
 
         char *repl = (char *) "fs:/vol/external01/";
@@ -151,7 +153,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
             // System apps don't have a splash screen.
             template_title.appType = MCP_APP_TYPE_SYSTEM_APPS;
         }
-        template_title.titleId = 0x0005000F00000000 + j;
+        template_title.titleId = UPPER_TITLE_ID_HOMEBREW << 16 | gFileInfos[j].lowerTitleID;
         template_title.titleVersion = 1;
         template_title.groupId = 0x400;
 
@@ -173,11 +175,11 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
 DECL_FUNCTION(int32_t, MCP_GetTitleInfoByTitleAndDevice, uint32_t mcp_handle, uint32_t titleid_lower_1, uint32_t titleid_upper, uint32_t titleid_lower_2, uint32_t unknown, MCPTitleListType *title) {
     if (gHomebrewLaunched) {
         memcpy(title, &(template_title), sizeof(MCPTitleListType));
-    } else if (titleid_upper == 0x0005000F) {
+    } else if (titleid_upper == UPPER_TITLE_ID_HOMEBREW) {
         char buffer[25];
         snprintf(buffer, 25, "/custom/%08X%08X", titleid_upper, titleid_lower_2);
         strcpy(template_title.path, buffer);
-        template_title.titleId = 0x0005000F00000000 + titleid_lower_1;
+        template_title.titleId = UPPER_TITLE_ID_HOMEBREW << 16 | titleid_lower_1;
         memcpy(title, &(template_title), sizeof(MCPTitleListType));
         return 0;
     }
@@ -197,7 +199,7 @@ typedef struct __attribute((packed)) {
 int32_t getRPXInfoForID(uint32_t id, romfs_fileInfo *info);
 
 DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *title, uint32_t u2) {
-    if ((title->titleId & 0x0005000F00000000) == 0x0005000F00000000 && (uint32_t) (title->titleId & 0xFFFFFFFF) < FILE_INFO_SIZE) {
+    if ((title->titleId & (UPPER_TITLE_ID_HOMEBREW << 16)) == (UPPER_TITLE_ID_HOMEBREW << 16) && (uint32_t) (title->titleId & 0xFFFFFFFF) < FILE_INFO_SIZE) {
         DEBUG_FUNCTION_LINE("Started homebrew\n");
         gHomebrewLaunched = TRUE;
         fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32, (title->titleId & 0xFFFFFFFF), &gLaunchXML);
@@ -328,7 +330,7 @@ DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t
 
 DECL_FUNCTION(int32_t, ACPGetTitleMetaXmlByDevice, uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *out_buf, uint32_t device, uint32_t u1) {
     int result = real_ACPGetTitleMetaXmlByDevice(titleid_upper, titleid_lower, out_buf, device, u1);
-    if (titleid_upper == 0x0005000F) {
+    if (titleid_upper == UPPER_TITLE_ID_HOMEBREW) {
         fillXmlForTitleID(titleid_upper, titleid_lower, out_buf);
         result = 0;
     }
@@ -336,7 +338,7 @@ DECL_FUNCTION(int32_t, ACPGetTitleMetaXmlByDevice, uint32_t titleid_upper, uint3
 }
 
 DECL_FUNCTION(int32_t, ACPGetTitleMetaDirByDevice, uint32_t titleid_upper, uint32_t titleid_lower, char *out_buf, uint32_t size, int device) {
-    if (titleid_upper == 0x0005000F) {
+    if (titleid_upper == UPPER_TITLE_ID_HOMEBREW) {
         snprintf(out_buf, 53, "/vol/storage_mlc01/sys/title/%08X/%08X/meta", titleid_upper, titleid_lower);
         return 0;
     }
@@ -365,7 +367,7 @@ DECL_FUNCTION(int32_t, ACPGetLaunchMetaXml, ACPMetaXml *metaxml) {
 }
 
 DECL_FUNCTION(uint32_t, ACPGetApplicationBox, uint32_t *u1, uint32_t *u2, uint32_t u3, uint32_t u4) {
-    if (u3 == 0x0005000F) {
+    if (u3 == UPPER_TITLE_ID_HOMEBREW) {
         uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
         u3 = (uint32_t) (titleID >> 32);
         u4 = (uint32_t) (0x00000000FFFFFFFF & titleID);
@@ -375,7 +377,7 @@ DECL_FUNCTION(uint32_t, ACPGetApplicationBox, uint32_t *u1, uint32_t *u2, uint32
 }
 
 DECL_FUNCTION(uint32_t, PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg, uint32_t *param) {
-    if (param[2] == 0x0005000F) {
+    if (param[2] == UPPER_TITLE_ID_HOMEBREW) {
         uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
         param[2] = (uint32_t) (titleID >> 32);
         param[3] = (uint32_t) (0x00000000FFFFFFFF & titleID);
@@ -385,7 +387,7 @@ DECL_FUNCTION(uint32_t, PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg, uint32_t *
 }
 
 DECL_FUNCTION(uint32_t, MCP_RightCheckLaunchable, uint32_t *u1, uint32_t *u2, uint32_t u3, uint32_t u4, uint32_t u5) {
-    if (u3 == 0x0005000F) {
+    if (u3 == UPPER_TITLE_ID_HOMEBREW) {
         uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
         u3 = (uint32_t) (titleID >> 32);
         u4 = (uint32_t) (0x00000000FFFFFFFF & titleID);
