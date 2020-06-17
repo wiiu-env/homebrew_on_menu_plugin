@@ -91,9 +91,9 @@ void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXm
     out_buf->reserved_flag0 = 0x00010001;
     out_buf->reserved_flag6 = 0x00000003;
     out_buf->pc_usk = 128;
-    strncpy(out_buf->product_code, "WUP-P-HBLD", strlen("WUP-P-HBLD"));
-    strncpy(out_buf->content_platform, "WUP", strlen("WUP"));
-    strncpy(out_buf->company_code, "0001", strlen("0001"));
+    strncpy(out_buf->product_code, "WUP-P-HBLD", strlen("WUP-P-HBLD") + 1);
+    strncpy(out_buf->content_platform, "WUP", strlen("WUP") + 1);
+    strncpy(out_buf->company_code, "0001", strlen("0001") + 1);
 }
 
 DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, MCPTitleListType *titleList, uint32_t size) {
