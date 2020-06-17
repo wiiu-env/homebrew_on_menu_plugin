@@ -26,8 +26,8 @@ struct _ACPMetaData {
     char bootlogo[28604];
 } _ACPMetaData;
 
-WUPS_PLUGIN_NAME("Homebrew SysLauncher");
-WUPS_PLUGIN_DESCRIPTION("Allows the user to load homebrew from the System Menu");
+WUPS_PLUGIN_NAME("Homebrew in Wii U menu");
+WUPS_PLUGIN_DESCRIPTION("Allows the user to load homebrew from the Wii U menu");
 WUPS_PLUGIN_VERSION("0.1");
 WUPS_PLUGIN_AUTHOR("Maschell");
 WUPS_PLUGIN_LICENSE("GPL");
