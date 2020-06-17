@@ -17,6 +17,7 @@
 #include <wut_romfs_dev.h>
 #include <utils/utils.h>
 #include "readFileWrapper.h"
+#include <whb/log_udp.h>
 #include "romfs_helper.h"
 #include "filelist.h"
 
@@ -51,12 +52,11 @@ INITIALIZE_PLUGIN() {
 }
 
 ON_APPLICATION_START(args) {
-    socket_lib_init();
-    log_init();
-    DEBUG_FUNCTION_LINE("IN PLUGIN\n");
+    WHBLogUdpInit();
+    DEBUG_FUNCTION_LINE("IN PLUGIN");
 
     if (_SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY) != OSGetTitleID()) {
-        DEBUG_FUNCTION_LINE("gHomebrewLaunched to FALSE\n");
+        DEBUG_FUNCTION_LINE("gHomebrewLaunched to FALSE");
         gHomebrewLaunched = FALSE;
     }
 }
@@ -69,7 +69,7 @@ ON_APPLICATION_END() {
 void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *out_buf) {
     int32_t id = getIDByLowerTitleID(titleid_lower);
     if (id < 0) {
-        DEBUG_FUNCTION_LINE("Failed to get id by titleid\n");
+        DEBUG_FUNCTION_LINE("Failed to get id by titleid");
         return;
     }
     if (id >= FILE_INFO_SIZE) {
@@ -121,7 +121,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
     int j = 0;
     for (int i = 0; i < dirList.GetFilecount(); i++) {
         if (j >= FILE_INFO_SIZE) {
-            DEBUG_FUNCTION_LINE("TOO MANY TITLES\n");
+            DEBUG_FUNCTION_LINE("TOO MANY TITLES");
             break;
         }
         //! skip our own application in the listing
@@ -173,7 +173,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
         template_title.sdkVersion = __OSGetProcessSDKVersion();
         template_title.unk0x60 = 0;
 
-        DEBUG_FUNCTION_LINE("[%d] %s [%016llX]\n", j, gFileInfos[j].path, template_title.titleId);
+        DEBUG_FUNCTION_LINE("[%d] %s [%016llX]", j, gFileInfos[j].path, template_title.titleId);
 
         memcpy(&(titleList[titlecount]), &template_title, sizeof(template_title));
 
@@ -216,7 +216,7 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
     if ((title->titleId & TITLE_ID_HOMEBREW_MASK) == TITLE_ID_HOMEBREW_MASK) {
         int32_t id = getIDByLowerTitleID(title->titleId & 0xFFFFFFFF);
         if (id >= 0) {
-            DEBUG_FUNCTION_LINE("Started homebrew\n");
+            DEBUG_FUNCTION_LINE("Started homebrew");
             gHomebrewLaunched = TRUE;
             fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32, (title->titleId & 0xFFFFFFFF), &gLaunchXML);
 
@@ -239,7 +239,7 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
             strncpy(request.path, gFileInfos[id].path, 255);
 
 
-            DEBUG_FUNCTION_LINE("Loading file %s size: %08X offset: %08X\n", request.path, request.filesize, request.fileoffset);
+            DEBUG_FUNCTION_LINE("Loading file %s size: %08X offset: %08X", request.path, request.filesize, request.fileoffset);
 
             DCFlushRange(&request, sizeof(LOAD_REQUEST));
 
@@ -282,7 +282,7 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
             sscanf(id, "%08X", &lowerTitleID);
             int32_t idVal = getIDByLowerTitleID(lowerTitleID);
             if (idVal < 0) {
-                DEBUG_FUNCTION_LINE("Failed to find id for titleID %08X\n", lowerTitleID);
+                DEBUG_FUNCTION_LINE("Failed to find id for titleID %08X", lowerTitleID);
             } else {
                 if (FSOpenFile_for_ID(idVal, ending, handle) < 0) {
                     return res;
@@ -290,14 +290,12 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
             }
             return FS_STATUS_OK;
         } else if (gHomebrewLaunched) {
-            socket_lib_init();
-            log_init();
             if (StringTools::EndsWith(path, iconTex)) {
                 *handle = 0x13371337;
-                DEBUG_FUNCTION_LINE("yooo let's do it\n");
+                DEBUG_FUNCTION_LINE("yooo let's do it");
                 return FS_STATUS_OK;
             } else {
-                DEBUG_FUNCTION_LINE("%s\n", path);
+                DEBUG_FUNCTION_LINE("%s", path);
             }
 
         }
@@ -314,11 +312,11 @@ DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFile
     if ((handle & 0xFF000000) == 0xFF000000) {
         int32_t fd = (handle & 0x00000FFF);
         int32_t romid = (handle & 0x00FFF000) >> 12;
-        DEBUG_FUNCTION_LINE("Close %d %d\n", fd, romid);
+        DEBUG_FUNCTION_LINE("Close %d %d", fd, romid);
         DeInitFile(fd);
         if (gFileInfos[romid].openedFiles--) {
             if (gFileInfos[romid].openedFiles <= 0) {
-                DEBUG_FUNCTION_LINE("unmount romfs no more handles\n");
+                DEBUG_FUNCTION_LINE("unmount romfs no more handles");
                 unmountRomfs(romid);
             }
         }
@@ -335,7 +333,7 @@ DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t
             cpySize = sizeof(gIconCache);
         }
         memcpy(buffer, gIconCache, cpySize);
-        DEBUG_FUNCTION_LINE("DUMMY\n");
+        DEBUG_FUNCTION_LINE("DUMMY");
         return (FSStatus) (cpySize / size);
     } else if (handle == 0x13371338) {
         uint32_t cpySize = size * count;
@@ -343,14 +341,14 @@ DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t
             cpySize = iconTex_tga_size;
         }
         memcpy(buffer, iconTex_tga, cpySize);
-        DEBUG_FUNCTION_LINE("DUMMY\n");
+        DEBUG_FUNCTION_LINE("DUMMY");
         return (FSStatus) (cpySize / size);
     }
     if ((handle & 0xFF000000) == 0xFF000000) {
         int32_t fd = (handle & 0x00000FFF);
         int32_t romid = (handle & 0x00FFF000) >> 12;
 
-        DEBUG_FUNCTION_LINE("READ %d from %d rom: %d\n", size * count, fd, romid);
+        DEBUG_FUNCTION_LINE("READ %d from %d rom: %d", size * count, fd, romid);
 
         int readSize = readFile(fd, buffer, (size * count));
 
