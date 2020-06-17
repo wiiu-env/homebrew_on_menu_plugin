@@ -210,7 +210,7 @@ int32_t getRPXInfoForID(uint32_t id, romfs_fileInfo *info);
 DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *title, uint32_t u2) {
     if ((title->titleId & TITLE_ID_HOMEBREW_MASK) == TITLE_ID_HOMEBREW_MASK) {
         int32_t id = getIDByLowerTitleID(title->titleId & 0xFFFFFFFF);
-        if (id > 0) {
+        if (id >= 0) {
             DEBUG_FUNCTION_LINE("Started homebrew\n");
             gHomebrewLaunched = TRUE;
             fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32, (title->titleId & 0xFFFFFFFF), &gLaunchXML);
