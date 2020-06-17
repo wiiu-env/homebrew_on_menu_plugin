@@ -1,32 +1,21 @@
 #include <wups.h>
-
-#include <zlib.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <exception>
-#include <string>
 #include <string.h>
-#include <stdlib.h>
 #include <coreinit/title.h>
 #include <coreinit/cache.h>
 #include <coreinit/systeminfo.h>
 #include <coreinit/mcp.h>
 #include <coreinit/filesystem.h>
-#include <coreinit/systeminfo.h>
-#include <coreinit/memorymap.h>
-#include <coreinit/dynload.h>
 #include <sysapp/title.h>
 #include <nn/acp.h>
 #include <nsysnet/socket.h>
 #include <coreinit/ios.h>
-#include <vpad/input.h>
 #include <utils/logger.h>
-#include <map>
-#include <utils/utils.h>
 #include "utils/StringTools.h"
 #include <fs/DirList.h>
 #include <wut_romfs_dev.h>
-#include "filelist.h"
+#include <utils/utils.h>
 #include "readFileWrapper.h"
 #include "romfs_helper.h"
 
