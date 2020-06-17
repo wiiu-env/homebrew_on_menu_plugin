@@ -37,7 +37,7 @@ WUPS_PLUGIN_AUTHOR("Maschell");
 WUPS_PLUGIN_LICENSE("GPL");
 
 #define UPPER_TITLE_ID_HOMEBREW 0x0005000F
-#define TITLE_ID_HOMEBREW_MASK (((uint64_t) UPPER_TITLE_ID_HOMEBREW) << 16)
+#define TITLE_ID_HOMEBREW_MASK (((uint64_t) UPPER_TITLE_ID_HOMEBREW) << 32)
 
 char gIconCache[65580] __attribute__((section(".data")));
 ACPMetaXml gLaunchXML __attribute__((section(".data")));
@@ -72,13 +72,18 @@ ON_APPLICATION_END() {
 }
 
 void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *out_buf) {
-    if (titleid_lower >= FILE_INFO_SIZE) {
+    int32_t id = getIDByLowerTitleID(titleid_lower);
+    if(id < 0){
+        DEBUG_FUNCTION_LINE("Failed to get id by titleid\n");
+        return;
+    }
+    if (id >= FILE_INFO_SIZE) {
         return;
     }
     out_buf->title_id = ((uint64_t) titleid_upper * 0x100000000) + titleid_lower;
-    strncpy(out_buf->longname_en, gFileInfos[titleid_lower].name, 511);
-    strncpy(out_buf->shortname_en, gFileInfos[titleid_lower].name, 255);
-    strncpy(out_buf->publisher_en, gFileInfos[titleid_lower].name, 255);
+    strncpy(out_buf->longname_en, gFileInfos[id].name, 511);
+    strncpy(out_buf->shortname_en, gFileInfos[id].name, 255);
+    strncpy(out_buf->publisher_en, gFileInfos[id].name, 255);
     out_buf->e_manual = 1;
     out_buf->e_manual_version = 0;
     out_buf->title_version = 1;
@@ -230,14 +235,14 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
             request.fileoffset = 0; //
 
             romfs_fileInfo info;
-            int res = getRPXInfoForID((title->titleId & 0xFFFFFFFF), &info);
+            int res = getRPXInfoForID(id, &info);
             if (res >= 0) {
                 request.filesize = ((uint32_t *) &info.length)[1];
                 request.fileoffset = ((uint32_t *) &info.offset)[1];
                 loadFileIntoBuffer((title->titleId & 0xFFFFFFFF), "meta/iconTex.tga", gIconCache, sizeof(gIconCache));
             }
 
-            strncpy(request.path, gFileInfos[(uint32_t) (title->titleId & 0xFFFFFFFF)].path, 255);
+            strncpy(request.path, gFileInfos[id].path, 255);
 
 
             DEBUG_FUNCTION_LINE("Loading file %s size: %08X offset: %08X\n", request.path, request.filesize, request.fileoffset);
@@ -276,13 +281,18 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
                 res = FS_STATUS_NOT_FOUND;
             }
 
-            uint32_t val;
+            uint32_t lowerTitleID;
             char *id = path + 1 + strlen(start);
             id[8] = 0;
             char *ending = id + 9;
-            sscanf(id, "%08X", &val);
-            if (FSOpenFile_for_ID(val, ending, handle) < 0) {
-                return res;
+            sscanf(id, "%08X", &lowerTitleID);
+            int32_t idVal = getIDByLowerTitleID(lowerTitleID);
+            if (idVal < 0) {
+                DEBUG_FUNCTION_LINE("Failed to find id for titleID %08X\n",lowerTitleID);
+            } else {
+                if (FSOpenFile_for_ID(idVal, ending, handle) < 0) {
+                    return res;
+                }
             }
             return FS_STATUS_OK;
         } else if (gHomebrewLaunched) {

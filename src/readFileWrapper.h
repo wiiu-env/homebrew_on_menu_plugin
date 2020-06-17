@@ -26,7 +26,7 @@ bool DeInitFile(int slot);
 
 void DeInitAllFiles();
 
-int32_t loadFileIntoBuffer(uint32_t id, const char *filepath, char *buffer, int sizeToRead);
+int32_t loadFileIntoBuffer(uint32_t lowerTitleID, const char *filepath, char *buffer, int sizeToRead);
 
 int32_t FSOpenFile_for_ID(uint32_t id, const char *filepath, int *handle);
 

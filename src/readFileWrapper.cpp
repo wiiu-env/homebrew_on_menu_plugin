@@ -151,7 +151,12 @@ bool initCompressedFileReadInformation(fileReadInformation *info) {
 }
 
 
-int32_t loadFileIntoBuffer(uint32_t id, const char *filepath, char *buffer, int sizeToRead) {
+int32_t loadFileIntoBuffer(uint32_t lowerTitleID, const char *filepath, char *buffer, int sizeToRead) {
+    int32_t id = getIDByLowerTitleID(lowerTitleID);
+    if(id < 0){
+        DEBUG_FUNCTION_LINE("Failed to get id by titleid\n");
+        return -3;
+    }
     if (!mountRomfs(id)) {
         return -1;
     }
