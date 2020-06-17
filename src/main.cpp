@@ -18,6 +18,7 @@
 #include <utils/utils.h>
 #include "readFileWrapper.h"
 #include "romfs_helper.h"
+#include "filelist.h"
 
 WUPS_PLUGIN_NAME("Homebrew SysLauncher");
 WUPS_PLUGIN_DESCRIPTION("Allows the user to load homebrew from the System Menu");
@@ -265,8 +266,8 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
             int res = FS_STATUS_NOT_FOUND;
             if (StringTools::EndsWith(path, iconTex)) {
                 // fallback to dummy icon if loaded homebrew is no .wbf
-                //*handle = 0x1337;
-                res = FS_STATUS_NOT_FOUND;
+                *handle = 0x13371338;
+                res = FS_STATUS_OK;
             }
 
             uint32_t lowerTitleID;
@@ -302,7 +303,7 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
 }
 
 DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFileHandle handle, uint32_t flags) {
-    if (handle == 0x13371337) {
+    if (handle == 0x13371337 || handle == 0x13371338) {
         return FS_STATUS_OK;
     }
     if ((handle & 0xFF000000) == 0xFF000000) {
@@ -329,6 +330,14 @@ DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t
             cpySize = sizeof(gIconCache);
         }
         memcpy(buffer, gIconCache, cpySize);
+        DEBUG_FUNCTION_LINE("DUMMY\n");
+        return (FSStatus) (cpySize / size);
+    } else if (handle == 0x13371338) {
+        uint32_t cpySize = size * count;
+        if (iconTex_tga_size < cpySize) {
+            cpySize = iconTex_tga_size;
+        }
+        memcpy(buffer, iconTex_tga, cpySize);
         DEBUG_FUNCTION_LINE("DUMMY\n");
         return (FSStatus) (cpySize / size);
     }
