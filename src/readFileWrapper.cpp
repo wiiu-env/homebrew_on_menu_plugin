@@ -12,77 +12,77 @@ fileReadInformation gFileReadInformation[FILE_READ_INFO_SIZE] __attribute__((sec
 int readFile(int slot, uint8_t *buffer, uint32_t size) {
     fileReadInformation *info = &gFileReadInformation[slot];
     if (!info->compressed) {
-        //DEBUG_FUNCTION_LINE("non compressed\n");
+        //DEBUG_FUNCTION_LINE("non compressed");
         return read(info->fd, buffer, size);
     } else {
         int startValue = info->strm.total_out;
         uint32_t newSize = 0;
         int ret = 0;
-        //DEBUG_FUNCTION_LINE("We want to read %d\n", size);
-        //DEBUG_FUNCTION_LINE("startValue %d \n",startValue);
+        //DEBUG_FUNCTION_LINE("We want to read %d", size);
+        //DEBUG_FUNCTION_LINE("startValue %d ",startValue);
         do {
             int CHUNK = 0x1000;
             uint32_t nextOut = CHUNK;
             if (nextOut > size) {
                 nextOut = size;
             }
-            //DEBUG_FUNCTION_LINE("nextOut = %d\n",nextOut);
+            //DEBUG_FUNCTION_LINE("nextOut = %d",nextOut);
             if (info->strm.avail_in == 0) {
-                //DEBUG_FUNCTION_LINE("Reading %d from compressed stream\n",CHUNK);
+                //DEBUG_FUNCTION_LINE("Reading %d from compressed stream",CHUNK);
                 info->strm.avail_in = read(info->fd, info->in, CHUNK);
                 if (info->strm.avail_in == 0) {
-                    DEBUG_FUNCTION_LINE("strm.avail_in is 0\n");
+                    DEBUG_FUNCTION_LINE("strm.avail_in is 0");
                     break;
                 }
                 info->strm.next_in = info->in;
             }
-            //DEBUG_FUNCTION_LINE("info->strm.avail_in = %d\n",info->strm.avail_in);
-            //DEBUG_FUNCTION_LINE("info->strm.next_in = %d\n",info->strm.next_in);
+            //DEBUG_FUNCTION_LINE("info->strm.avail_in = %d",info->strm.avail_in);
+            //DEBUG_FUNCTION_LINE("info->strm.next_in = %d",info->strm.next_in);
 
             /* run inflate() on input until output buffer not full */
             do {
-                //DEBUG_FUNCTION_LINE("newSize %d, size %d, info->strm.avail_out %d\n", newSize, size, info->strm.avail_out);
+                //DEBUG_FUNCTION_LINE("newSize %d, size %d, info->strm.avail_out %d", newSize, size, info->strm.avail_out);
 
                 if (nextOut > size - newSize) {
                     nextOut = size - newSize;
                 }
 
                 info->strm.avail_out = nextOut;
-                //DEBUG_FUNCTION_LINE("info->strm.avail_out = %d\n",info->strm.avail_out);
+                //DEBUG_FUNCTION_LINE("info->strm.avail_out = %d",info->strm.avail_out);
                 info->strm.next_out = (buffer + newSize);
-                //DEBUG_FUNCTION_LINE("info->strm.next_out = %08X\n",info->strm.next_out);
+                //DEBUG_FUNCTION_LINE("info->strm.next_out = %08X",info->strm.next_out);
                 ret = inflate(&info->strm, Z_NO_FLUSH);
-                //DEBUG_FUNCTION_LINE("ret = %d\n",ret);
+                //DEBUG_FUNCTION_LINE("ret = %d",ret);
                 if (ret == Z_STREAM_ERROR) {
-                    DEBUG_FUNCTION_LINE("Z_STREAM_ERROR\n");
+                    DEBUG_FUNCTION_LINE("Z_STREAM_ERROR");
                     return 0;
                 }
 
                 switch (ret) {
                     case Z_NEED_DICT:
-                        DEBUG_FUNCTION_LINE("Z_NEED_DICT\n");
+                        DEBUG_FUNCTION_LINE("Z_NEED_DICT");
                         ret = Z_DATA_ERROR;     /* and fall through */
                     case Z_DATA_ERROR:
                     case Z_MEM_ERROR:
-                        DEBUG_FUNCTION_LINE("Z_MEM_ERROR or Z_DATA_ERROR\n");
+                        DEBUG_FUNCTION_LINE("Z_MEM_ERROR or Z_DATA_ERROR");
                         (void) inflateEnd(&info->strm);
                         return ret;
                 }
 
                 //int canBeWritten = CHUNK - info->strm.avail_out;
-                //DEBUG_FUNCTION_LINE("canBeWritten = %d\n",canBeWritten);
+                //DEBUG_FUNCTION_LINE("canBeWritten = %d",canBeWritten);
 
                 newSize = info->strm.total_out - startValue;
                 if (newSize == size) {
-                    //DEBUG_FUNCTION_LINE("newSize was as wanted %d\n", newSize);
+                    //DEBUG_FUNCTION_LINE("newSize was as wanted %d", newSize);
                     break;
                 }
                 nextOut = CHUNK;
                 if (newSize + nextOut >= (size)) {
                     nextOut = (size) - newSize;
                 }
-                //DEBUG_FUNCTION_LINE("newSize = %d\n",newSize);
-                //DEBUG_FUNCTION_LINE("nextOut = %d\n",nextOut);
+                //DEBUG_FUNCTION_LINE("newSize = %d",newSize);
+                //DEBUG_FUNCTION_LINE("nextOut = %d",nextOut);
             } while (info->strm.avail_out == 0 && newSize < (size));
 
             /* done when inflate() says it's done */
@@ -142,7 +142,7 @@ bool initCompressedFileReadInformation(fileReadInformation *info) {
     info->strm.next_in = Z_NULL;
     int ret = inflateInit2(&info->strm, MAX_WBITS | 16); //gzip
     if (ret != Z_OK) {
-        DEBUG_FUNCTION_LINE("ret != Z_OK\n");
+        DEBUG_FUNCTION_LINE("ret != Z_OK");
         info->cInitDone = false;
         return false;
     }
@@ -154,7 +154,7 @@ bool initCompressedFileReadInformation(fileReadInformation *info) {
 int32_t loadFileIntoBuffer(uint32_t lowerTitleID, const char *filepath, char *buffer, int sizeToRead) {
     int32_t id = getIDByLowerTitleID(lowerTitleID);
     if (id < 0) {
-        DEBUG_FUNCTION_LINE("Failed to get id by titleid\n");
+        DEBUG_FUNCTION_LINE("Failed to get id by titleid");
         return -3;
     }
     if (!mountRomfs(id)) {
@@ -168,15 +168,15 @@ int32_t loadFileIntoBuffer(uint32_t lowerTitleID, const char *filepath, char *bu
     int32_t fd = (handle & 0x00000FFF);
     int32_t romid = (handle & 0x00FFF000) >> 12;
 
-    DEBUG_FUNCTION_LINE("READ %d from %d rom: %d\n", sizeToRead, fd, romid);
+    DEBUG_FUNCTION_LINE("READ %d from %d rom: %d", sizeToRead, fd, romid);
 
     int readSize = readFile(fd, (uint8_t *) buffer, (sizeToRead));
 
-    DEBUG_FUNCTION_LINE("Close %d %d\n", fd, romid);
+    DEBUG_FUNCTION_LINE("Close %d %d", fd, romid);
     DeInitFile(fd);
     if (gFileInfos[romid].openedFiles--) {
         if (gFileInfos[romid].openedFiles <= 0) {
-            DEBUG_FUNCTION_LINE("unmount romfs no more handles\n");
+            DEBUG_FUNCTION_LINE("unmount romfs no more handles");
             unmountRomfs(romid);
         }
     }
@@ -221,10 +221,10 @@ int32_t FSOpenFile_for_ID(uint32_t id, const char *filepath, int *handle) {
 
     int fd = open(buffer, 0);
     if (fd >= 0) {
-        DEBUG_FUNCTION_LINE("Opened %s from %s \n", buffer, romName);
+        DEBUG_FUNCTION_LINE("Opened %s from %s ", buffer, romName);
         int slot = fileReadInformation_getSlot();
         if (slot < 0) {
-            DEBUG_FUNCTION_LINE("Failed to get a slot\n");
+            DEBUG_FUNCTION_LINE("Failed to get a slot");
             return -5;
         }
         fileReadInformation *info = &gFileReadInformation[slot];
@@ -232,7 +232,7 @@ int32_t FSOpenFile_for_ID(uint32_t id, const char *filepath, int *handle) {
         if (!nonCompressed) {
             info->compressed = true;
             initCompressedFileReadInformation(info);
-            DEBUG_FUNCTION_LINE("Init compressed, got slot %d\n", slot);
+            DEBUG_FUNCTION_LINE("Init compressed, got slot %d", slot);
         } else {
             info->cInitDone = true;
         }

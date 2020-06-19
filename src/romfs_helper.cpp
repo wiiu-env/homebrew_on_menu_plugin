@@ -22,9 +22,9 @@ void unmountRomfs(uint32_t id) {
     if (gFileInfos[id].romfsMounted) {
         char romName[10];
         snprintf(romName, 10, "%08X", id);
-        DEBUG_FUNCTION_LINE("Unmounting %s\n", romName);
+        DEBUG_FUNCTION_LINE("Unmounting %s", romName);
         int res = romfsUnmount(romName);
-        DEBUG_FUNCTION_LINE("res: %d\n", res);
+        DEBUG_FUNCTION_LINE("res: %d", res);
         gFileInfos[id].romfsMounted = false;
     }
 }
@@ -37,7 +37,7 @@ void unmountAllRomfs() {
 
 bool mountRomfs(uint32_t id) {
     if (id >= FILE_INFO_SIZE) {
-        DEBUG_FUNCTION_LINE("HANDLE WAS TOO BIG %d\n", id);
+        DEBUG_FUNCTION_LINE("HANDLE WAS TOO BIG %d", id);
         return false;
     }
     if (!gFileInfos[id].romfsMounted) {
@@ -45,13 +45,13 @@ bool mountRomfs(uint32_t id) {
         snprintf(buffer, 256, "fs:/vol/external01/%s", gFileInfos[id].path);
         char romName[10];
         snprintf(romName, 10, "%08X", id);
-        DEBUG_FUNCTION_LINE("Mount %s as %s\n", buffer, romName);
+        DEBUG_FUNCTION_LINE("Mount %s as %s", buffer, romName);
         if (romfsMount(romName, buffer) == 0) {
-            DEBUG_FUNCTION_LINE("Mounted successfully \n");
+            DEBUG_FUNCTION_LINE("Mounted successfully ");
             gFileInfos[id].romfsMounted = true;
             return true;
         } else {
-            DEBUG_FUNCTION_LINE("Mounting failed\n");
+            DEBUG_FUNCTION_LINE("Mounting failed");
             return false;
         }
     }
