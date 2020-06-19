@@ -1,5 +1,4 @@
 #include <wups.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <coreinit/title.h>
@@ -9,7 +8,6 @@
 #include <coreinit/filesystem.h>
 #include <sysapp/title.h>
 #include <nn/acp.h>
-#include <nsysnet/socket.h>
 #include <coreinit/ios.h>
 #include <utils/logger.h>
 #include "utils/StringTools.h"
@@ -292,7 +290,6 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
         } else if (gHomebrewLaunched) {
             if (StringTools::EndsWith(path, iconTex)) {
                 *handle = 0x13371337;
-                DEBUG_FUNCTION_LINE("yooo let's do it");
                 return FS_STATUS_OK;
             } else {
                 DEBUG_FUNCTION_LINE("%s", path);
@@ -333,7 +330,6 @@ DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t
             cpySize = sizeof(gIconCache);
         }
         memcpy(buffer, gIconCache, cpySize);
-        DEBUG_FUNCTION_LINE("DUMMY");
         return (FSStatus) (cpySize / size);
     } else if (handle == 0x13371338) {
         uint32_t cpySize = size * count;
