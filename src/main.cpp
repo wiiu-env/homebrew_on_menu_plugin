@@ -1,6 +1,6 @@
 #include <wups.h>
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 #include <coreinit/title.h>
 #include <coreinit/cache.h>
 #include <coreinit/systeminfo.h>
@@ -13,9 +13,9 @@
 #include "utils/StringTools.h"
 #include <fs/DirList.h>
 #include <wut_romfs_dev.h>
-#include <utils/utils.h>
 #include "readFileWrapper.h"
 #include <whb/log_udp.h>
+#include "fs/FSUtils.h"
 #include "romfs_helper.h"
 #include "filelist.h"
 
@@ -157,12 +157,32 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
 
         const char *indexedDevice = "mlc";
         strcpy(template_title.indexedDevice, indexedDevice);
+
+
+        // System apps don't have a splash screen.
+        template_title.appType = MCP_APP_TYPE_SYSTEM_APPS;
+
+        // Check if the have bootTvTex and bootDrcTex that could be shown.
         if (StringTools::EndsWith(gFileInfos[j].name, ".wbf")) {
-            template_title.appType = MCP_APP_TYPE_GAME;
-        } else {
-            // System apps don't have a splash screen.
-            template_title.appType = MCP_APP_TYPE_SYSTEM_APPS;
+            if (romfsMount("romfscheck", dirList.GetFilepath(i)) == 0) {
+                bool foundSplashScreens = true;
+                if (!FSUtils::CheckFile("romfscheck:/meta/bootTvTex.tga") && !FSUtils::CheckFile("romfscheck:/meta/bootTvTex.tga.gz")) {
+                    foundSplashScreens = false;
+                }
+                if (!FSUtils::CheckFile("romfscheck:/meta/bootDrcTex.tga") && !FSUtils::CheckFile("romfscheck:/meta/bootDrcTex.tga.gz")) {
+                    foundSplashScreens = false;
+                }
+                if (foundSplashScreens) {
+                    DEBUG_FUNCTION_LINE("Show splash screens");
+                    // Show splash screens
+                    template_title.appType = MCP_APP_TYPE_GAME;
+                }
+                romfsUnmount("romfscheck");
+            } else {
+                //DEBUG_FUNCTION_LINE("Mounting %s failed", dirList.GetFilepath(i));
+            }
         }
+
         template_title.titleId = TITLE_ID_HOMEBREW_MASK | gFileInfos[j].lowerTitleID;
         template_title.titleVersion = 1;
         template_title.groupId = 0x400;
