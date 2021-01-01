@@ -42,16 +42,17 @@ bool mountRomfs(uint32_t id) {
     }
     if (!gFileInfos[id].romfsMounted) {
         char buffer[256];
-        snprintf(buffer, 256, "fs:/vol/external01/%s", gFileInfos[id].path);
+        snprintf(buffer, 256, "/vol/external01/%s", gFileInfos[id].path);
         char romName[10];
         snprintf(romName, 10, "%08X", id);
         DEBUG_FUNCTION_LINE("Mount %s as %s", buffer, romName);
-        if (romfsMount(romName, buffer) == 0) {
+        int32_t  res = 0;
+        if ((res = romfsMount(romName, buffer, RomfsSource_FileDescriptor_CafeOS)) == 0) {
             DEBUG_FUNCTION_LINE("Mounted successfully ");
             gFileInfos[id].romfsMounted = true;
             return true;
         } else {
-            DEBUG_FUNCTION_LINE("Mounting failed");
+            DEBUG_FUNCTION_LINE("Mounting failed %d", res);
             return false;
         }
     }
@@ -78,7 +79,7 @@ int32_t getRPXInfoForID(uint32_t id, romfs_fileInfo *info) {
     int res = -3;
     while ((entry = readdir(dir)) != NULL) {
         if (StringTools::EndsWith(entry->d_name, ".rpx")) {
-            if (romfs_GetFileInfoPerPath(romName, entry->d_name, info) >= 0) {
+            if (romfsGetFileInfoPerPath(romName, entry->d_name, info) >= 0) {
                 found = true;
                 res = 0;
             }

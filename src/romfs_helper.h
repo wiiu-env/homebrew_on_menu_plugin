@@ -1,8 +1,7 @@
 #pragma once
+#include <cstdint>
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <wut_romfs_dev.h>
+#include <romfs_dev.h>
 
 typedef struct WUT_PACKED FileInfos_ {
     char path[256];

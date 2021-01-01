@@ -167,7 +167,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
 
         // Check if the have bootTvTex and bootDrcTex that could be shown.
         if (StringTools::EndsWith(gFileInfos[j].name, ".wbf")) {
-            if (romfsMount("romfscheck", dirList.GetFilepath(i)) == 0) {
+            if (romfsMount("romfscheck", dirList.GetFilepath(i), RomfsSource_FileDescriptor) == 0) {
                 bool foundSplashScreens = true;
                 if (!FSUtils::CheckFile("romfscheck:/meta/bootTvTex.tga") && !FSUtils::CheckFile("romfscheck:/meta/bootTvTex.tga.gz")) {
                     foundSplashScreens = false;
@@ -223,53 +223,37 @@ DECL_FUNCTION(int32_t, MCP_GetTitleInfoByTitleAndDevice, uint32_t mcp_handle, ui
     return result;
 }
 
-typedef struct __attribute((packed)) {
-    uint32_t command;
-    uint32_t target;
-    uint32_t filesize;
-    uint32_t fileoffset;
-    char path[256];
-} LOAD_REQUEST;
-
-int32_t getRPXInfoForID(uint32_t id, romfs_fileInfo *info);
-
 DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *title, uint32_t u2) {
     if ((title->titleId & TITLE_ID_HOMEBREW_MASK) == TITLE_ID_HOMEBREW_MASK) {
         int32_t id = getIDByLowerTitleID(title->titleId & 0xFFFFFFFF);
         if (id >= 0) {
-            DEBUG_FUNCTION_LINE("Started homebrew");
+            DEBUG_FUNCTION_LINE("Starting a homebrew title");
+            OSDynLoad_Module module;
+
+            OSDynLoad_Error dyn_res = OSDynLoad_Acquire("homebrew_rpx_loader", &module);
+            if (dyn_res != OS_DYNLOAD_OK) {
+                OSFatal("Failed to acquire homebrew_rpx_loader");
+            }
+
+
+            bool (*loadRPXFromSDOnNextLaunch)(const std::string &path);
+            dyn_res = OSDynLoad_FindExport(module, false, "loadRPXFromSDOnNextLaunch", reinterpret_cast<void **>(&loadRPXFromSDOnNextLaunch));
+            if (dyn_res != OS_DYNLOAD_OK) {
+                OSFatal("Failed to find export loadRPXFromSDOnNextLaunch");
+            }
+
             gHomebrewLaunched = TRUE;
             fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32, (title->titleId & 0xFFFFFFFF), &gLaunchXML);
-
-            LOAD_REQUEST request;
-            memset(&request, 0, sizeof(request));
-
-            request.command = 0xFC; // IPC_CUSTOM_LOAD_CUSTOM_RPX;
-            request.target = 0;     // LOAD_FILE_TARGET_SD_CARD
-            request.filesize = 0;   // unknown
-            request.fileoffset = 0; //
 
             romfs_fileInfo info;
             int res = getRPXInfoForID(id, &info);
             if (res >= 0) {
-                request.filesize = ((uint32_t *) &info.length)[1];
-                request.fileoffset = ((uint32_t *) &info.offset)[1];
                 loadFileIntoBuffer((title->titleId & 0xFFFFFFFF), "meta/iconTex.tga", gIconCache, sizeof(gIconCache));
             }
 
-            strncpy(request.path, gFileInfos[id].path, 255);
-
-
-            DEBUG_FUNCTION_LINE("Loading file %s size: %08X offset: %08X", request.path, request.filesize, request.fileoffset);
-
-            DCFlushRange(&request, sizeof(LOAD_REQUEST));
-
-            int mcpFd = IOS_Open("/dev/mcp", (IOSOpenMode) 0);
-            if (mcpFd >= 0) {
-                int out = 0;
-                IOS_Ioctl(mcpFd, 100, &request, sizeof(request), &out, sizeof(out));
-                IOS_Close(mcpFd);
-            }
+            unmountRomfs(id);
+            loadRPXFromSDOnNextLaunch(gFileInfos[id].path);
+            mountRomfs(id);
             return 0;
         } else {
             DEBUG_FUNCTION_LINE("Failed to get the id for titleID %016llX", title->titleId);
