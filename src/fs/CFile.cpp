@@ -7,7 +7,7 @@
 
 CFile::CFile() {
     iFd = -1;
-    mem_file = NULL;
+    mem_file = nullptr;
     filesize = 0;
     pos = 0;
 }

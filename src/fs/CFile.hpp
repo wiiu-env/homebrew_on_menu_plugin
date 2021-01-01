@@ -63,9 +63,9 @@ public:
 
 protected:
     int32_t iFd;
-    const uint8_t *mem_file;
-    uint64_t filesize;
-    uint64_t pos;
+    const uint8_t *mem_file{};
+    uint64_t filesize{};
+    uint64_t pos{};
 };
 
 #endif

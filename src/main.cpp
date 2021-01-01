@@ -1,28 +1,31 @@
 #include <wups.h>
 #include <cstdio>
 #include <cstring>
+#include <coreinit/debug.h>
 #include <coreinit/title.h>
 #include <coreinit/cache.h>
 #include <coreinit/systeminfo.h>
 #include <coreinit/mcp.h>
 #include <coreinit/filesystem.h>
 #include <sysapp/title.h>
+#include <coreinit/dynload.h>
 #include <nn/acp.h>
 #include <coreinit/ios.h>
 #include <utils/logger.h>
 #include "utils/StringTools.h"
 #include <fs/DirList.h>
-#include <wut_romfs_dev.h>
+#include <romfs_dev.h>
 #include "readFileWrapper.h"
 #include <whb/log_udp.h>
 #include "fs/FSUtils.h"
 #include "romfs_helper.h"
 #include "filelist.h"
+#include "utils/utils.h"
 
-struct _ACPMetaData {
+typedef struct ACPMetaData {
     char bootmovie[80696];
     char bootlogo[28604];
-} _ACPMetaData;
+} ACPMetaData;
 
 WUPS_PLUGIN_NAME("Homebrew in Wii U menu");
 WUPS_PLUGIN_DESCRIPTION("Allows the user to load homebrew from the Wii U menu");
@@ -31,6 +34,7 @@ WUPS_PLUGIN_AUTHOR("Maschell");
 WUPS_PLUGIN_LICENSE("GPL");
 
 #define UPPER_TITLE_ID_HOMEBREW 0x0005000F
+
 #define TITLE_ID_HOMEBREW_MASK (((uint64_t) UPPER_TITLE_ID_HOMEBREW) << 32)
 
 char gIconCache[65580] __attribute__((section(".data")));
@@ -49,9 +53,9 @@ INITIALIZE_PLUGIN() {
     gHomebrewLaunched = FALSE;
 }
 
+
 ON_APPLICATION_START(args) {
     WHBLogUdpInit();
-    DEBUG_FUNCTION_LINE("IN PLUGIN");
 
     if (_SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY) != OSGetTitleID()) {
         DEBUG_FUNCTION_LINE("gHomebrewLaunched to FALSE");
@@ -157,7 +161,6 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
 
         const char *indexedDevice = "mlc";
         strcpy(template_title.indexedDevice, indexedDevice);
-
 
         // System apps don't have a splash screen.
         template_title.appType = MCP_APP_TYPE_SYSTEM_APPS;
@@ -392,6 +395,9 @@ DECL_FUNCTION(int32_t, ACPGetTitleMetaDirByDevice, uint32_t titleid_upper, uint3
     return result;
 }
 
+/*
+ * Load the H&S app instead
+ */
 DECL_FUNCTION(int32_t, _SYSLaunchTitleByPathFromLauncher, char *pathToLoad, uint32_t u2) {
     const char *start = "/custom/";
     if (strncmp(pathToLoad, start, strlen(start)) == 0) {
@@ -422,6 +428,9 @@ DECL_FUNCTION(uint32_t, ACPGetApplicationBox, uint32_t *u1, uint32_t *u2, uint32
     return result;
 }
 
+/*
+ * Redirect the launchable check to H&S
+ */
 DECL_FUNCTION(uint32_t, PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg, uint32_t *param) {
     if (param[2] == UPPER_TITLE_ID_HOMEBREW) {
         uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
@@ -432,6 +441,9 @@ DECL_FUNCTION(uint32_t, PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg, uint32_t *
     return result;
 }
 
+/*
+ * Redirect the launchable check to H&S
+ */
 DECL_FUNCTION(uint32_t, MCP_RightCheckLaunchable, uint32_t *u1, uint32_t *u2, uint32_t u3, uint32_t u4, uint32_t u5) {
     if (u3 == UPPER_TITLE_ID_HOMEBREW) {
         uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
@@ -442,6 +454,9 @@ DECL_FUNCTION(uint32_t, MCP_RightCheckLaunchable, uint32_t *u1, uint32_t *u2, ui
     return result;
 }
 
+/*
+ * Patch the meta xml for the home menu
+ */
 DECL_FUNCTION(int32_t, HBM_NN_ACP_ACPGetTitleMetaXmlByDevice, uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *metaxml, uint32_t device) {
     if (gHomebrewLaunched) {
         memcpy(metaxml, &gLaunchXML, sizeof(gLaunchXML));
@@ -451,26 +466,29 @@ DECL_FUNCTION(int32_t, HBM_NN_ACP_ACPGetTitleMetaXmlByDevice, uint32_t titleid_u
     return result;
 }
 
-
-DECL_FUNCTION(uint32_t, ACPGetLaunchMetaData, struct _ACPMetaData *metadata) {
+/*
+ * Patch the boot movie and and boot logo
+ */
+DECL_FUNCTION(uint32_t, ACPGetLaunchMetaData, struct ACPMetaData *metadata) {
     uint32_t result = real_ACPGetLaunchMetaData(metadata);
 
     if (gHomebrewLaunched) {
         memcpy(metadata->bootmovie, bootMovie_h264, bootMovie_h264_size);
         memcpy(metadata->bootlogo, bootLogoTex_tga, bootLogoTex_tga_size);
+        DCFlushRange(metadata->bootmovie, bootMovie_h264_size);
+        DCFlushRange(metadata->bootlogo, bootMovie_h264_size);
+
     }
 
     return result;
 }
+
 
 WUPS_MUST_REPLACE_PHYSICAL_FOR_PROCESS(HBM_NN_ACP_ACPGetTitleMetaXmlByDevice, 0x2E36CE44, 0x0E36CE44, WUPS_FP_TARGET_PROCESS_HOME_MENU);
 WUPS_MUST_REPLACE(ACPGetApplicationBox, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetApplicationBox);
 WUPS_MUST_REPLACE(PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg, WUPS_LOADER_LIBRARY_DRMAPP, PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg);
 WUPS_MUST_REPLACE(MCP_RightCheckLaunchable, WUPS_LOADER_LIBRARY_COREINIT, MCP_RightCheckLaunchable);
 
-WUPS_MUST_REPLACE(FSReadFile, WUPS_LOADER_LIBRARY_COREINIT, FSReadFile);
-WUPS_MUST_REPLACE(FSOpenFile, WUPS_LOADER_LIBRARY_COREINIT, FSOpenFile);
-WUPS_MUST_REPLACE(FSCloseFile, WUPS_LOADER_LIBRARY_COREINIT, FSCloseFile);
 WUPS_MUST_REPLACE(MCP_TitleList, WUPS_LOADER_LIBRARY_COREINIT, MCP_TitleList);
 WUPS_MUST_REPLACE(MCP_GetTitleInfoByTitleAndDevice, WUPS_LOADER_LIBRARY_COREINIT, MCP_GetTitleInfoByTitleAndDevice);
 
@@ -480,3 +498,7 @@ WUPS_MUST_REPLACE(ACPGetLaunchMetaXml, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetLaunchM
 WUPS_MUST_REPLACE(ACPGetTitleMetaDirByDevice, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetTitleMetaDirByDevice);
 WUPS_MUST_REPLACE(_SYSLaunchTitleByPathFromLauncher, WUPS_LOADER_LIBRARY_SYSAPP, _SYSLaunchTitleByPathFromLauncher);
 WUPS_MUST_REPLACE(ACPGetLaunchMetaData, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetLaunchMetaData);
+
+WUPS_MUST_REPLACE(FSReadFile, WUPS_LOADER_LIBRARY_COREINIT, FSReadFile);
+WUPS_MUST_REPLACE(FSOpenFile, WUPS_LOADER_LIBRARY_COREINIT, FSOpenFile);
+WUPS_MUST_REPLACE(FSCloseFile, WUPS_LOADER_LIBRARY_COREINIT, FSCloseFile);

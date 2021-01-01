@@ -44,7 +44,7 @@ int32_t FSUtils::LoadFileToMem(const char *filepath, uint8_t **inbuffer, uint32_
 
     if (done != filesize) {
         free(buffer);
-        buffer = NULL;
+        buffer = nullptr;
         return -3;
     }
 
@@ -62,7 +62,7 @@ int32_t FSUtils::CheckFile(const char *filepath) {
     if (!filepath)
         return 0;
 
-    struct stat filestat;
+    struct stat filestat{};
 
     char dirnoslash[strlen(filepath) + 2];
     snprintf(dirnoslash, sizeof(dirnoslash), "%s", filepath);

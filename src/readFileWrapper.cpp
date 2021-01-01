@@ -1,11 +1,11 @@
 #include "readFileWrapper.h"
 #include "fs/FSUtils.h"
 #include "utils/logger.h"
-#include <unistd.h>
-#include <malloc.h>
-#include <stdio.h>
+
+#include <cstdio>
 #include <fcntl.h>
 #include "romfs_helper.h"
+#include <cstdlib>
 
 fileReadInformation gFileReadInformation[FILE_READ_INFO_SIZE] __attribute__((section(".data")));
 
@@ -117,7 +117,7 @@ void DeInitAllFiles() {
 
 int fileReadInformation_getSlot() {
     for (int i = 0; i < 32; i++) {
-        if (gFileReadInformation[i].inUse == false) {
+        if (!gFileReadInformation[i].inUse) {
             gFileReadInformation[i].inUse = true;
             return i;
         }
@@ -127,7 +127,7 @@ int fileReadInformation_getSlot() {
 
 
 bool initCompressedFileReadInformation(fileReadInformation *info) {
-    if (info == NULL || !info->compressed) {
+    if (info == nullptr || !info->compressed) {
         info->cInitDone = false;
         return false;
     }
@@ -213,11 +213,13 @@ int32_t FSOpenFile_for_ID(uint32_t id, const char *filepath, int *handle) {
     bool nonCompressed = false;
     if (!FSUtils::CheckFile(buffer)) {
         snprintf(buffer, 256, "%s:/%s", romName, test);
+        free(test);
         if (!FSUtils::CheckFile(buffer)) {
             return -3;
         }
         nonCompressed = true;
     }
+    free(test);
 
     int fd = open(buffer, 0);
     if (fd >= 0) {
@@ -225,6 +227,7 @@ int32_t FSOpenFile_for_ID(uint32_t id, const char *filepath, int *handle) {
         int slot = fileReadInformation_getSlot();
         if (slot < 0) {
             DEBUG_FUNCTION_LINE("Failed to get a slot");
+            close(fd);
             return -5;
         }
         fileReadInformation *info = &gFileReadInformation[slot];
