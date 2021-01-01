@@ -20,13 +20,13 @@ int32_t FSUtils::LoadFileToMem(const char *filepath, uint8_t **inbuffer, uint32_
     uint32_t filesize = lseek(iFd, 0, SEEK_END);
     lseek(iFd, 0, SEEK_SET);
 
-    uint8_t *buffer = (uint8_t *) malloc(filesize);
+    uint8_t *buffer = (uint8_t *) memalign(0x40, filesize);
     if (buffer == NULL) {
         close(iFd);
         return -2;
     }
 
-    uint32_t blocksize = 0x4000;
+    uint32_t blocksize = 0x100000;
     uint32_t done = 0;
     int32_t readBytes = 0;
 
