@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <coreinit/mcp.h>
 
 #include <romfs_dev.h>
 
@@ -10,6 +11,7 @@ typedef struct WUT_PACKED FileInfos_ {
     uint32_t lowerTitleID;
     bool romfsMounted;
     int openedFiles;
+    MCPTitleListType titleInfo;
 } FileInfos;
 
 #define FILE_INFO_SIZE          300

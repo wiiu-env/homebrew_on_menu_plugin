@@ -39,13 +39,15 @@ WUPS_PLUGIN_LICENSE("GPL");
 
 char gIconCache[65580] __attribute__((section(".data")));
 ACPMetaXml gLaunchXML __attribute__((section(".data")));
-MCPTitleListType template_title __attribute__((section(".data")));
+MCPTitleListType current_launched_title_info __attribute__((section(".data")));
 BOOL gHomebrewLaunched __attribute__((section(".data")));
+
+void readCustomTitlesFromSD();
 
 WUPS_USE_WUT_CRT()
 
 INITIALIZE_PLUGIN() {
-    memset((void *) &template_title, 0, sizeof(template_title));
+    memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
     memset((void *) &gLaunchXML, 0, sizeof(gLaunchXML));
     memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
     memset((void *) &gFileReadInformation, 0, sizeof(gFileReadInformation));
@@ -53,9 +55,14 @@ INITIALIZE_PLUGIN() {
     gHomebrewLaunched = FALSE;
 }
 
-
 ON_APPLICATION_START(args) {
     WHBLogUdpInit();
+
+    if (OSGetTitleID() == 0x0005001010040000L || // Wii U Menu JPN
+        OSGetTitleID() == 0x0005001010040100L || // Wii U Menu USA
+        OSGetTitleID() == 0x0005001010040200L) { // Wii U Menu ERU
+        readCustomTitlesFromSD();
+    }
 
     if (_SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY) != OSGetTitleID()) {
         DEBUG_FUNCTION_LINE("gHomebrewLaunched to FALSE");
@@ -113,11 +120,12 @@ unsigned int hash(char *str) {
     return h; // or, h % ARRAY_SIZE;
 }
 
-DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, MCPTitleListType *titleList, uint32_t size) {
-    int32_t result = real_MCP_TitleList(handle, outTitleCount, titleList, size);
-    uint32_t titlecount = *outTitleCount;
+void readCustomTitlesFromSD() {
+    // Reset current infos
+    unmountAllRomfs();
+    memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
 
-    DirList dirList("fs:/vol/external01/wiiu/apps", ".rpx,.wbf", DirList::Files | DirList::CheckSubfolders, 1);
+    DirList dirList("fs:/vol/external01/wiiu/apps", ".rpx,.wuhb", DirList::Files | DirList::CheckSubfolders, 1);
     dirList.SortList();
 
     int j = 0;
@@ -126,12 +134,14 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
             DEBUG_FUNCTION_LINE("TOO MANY TITLES");
             break;
         }
-        //! skip our own application in the listing
-        if (strcasecmp(dirList.GetFilename(i), "homebrew_launcher.rpx") == 0) {
+
+        //! skip wiiload temp files
+        if (strcasecmp(dirList.GetFilename(i), "temp.rpx") == 0) {
             continue;
         }
-        //! skip our own application in the listing
-        if (strcasecmp(dirList.GetFilename(i), "temp.rpx") == 0) {
+
+        //! skip wiiload temp files
+        if (strcasecmp(dirList.GetFilename(i), "temp.wuhb") == 0) {
             continue;
         }
 
@@ -145,28 +155,30 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
         char *input = (char *) dirList.GetFilepath(i);
 
         char *path = StringTools::str_replace(input, repl, with);
-        if (path != NULL) {
+        if (path != nullptr) {
             strncpy(gFileInfos[j].path, path, 255);
             free(path);
         }
 
         gFileInfos[j].lowerTitleID = hash(gFileInfos[j].path);
 
+        MCPTitleListType *cur_title_info = &(gFileInfos[j].titleInfo);
+
         char buffer[25];
         snprintf(buffer, 25, "/custom/%08X%08X", UPPER_TITLE_ID_HOMEBREW, gFileInfos[j].lowerTitleID);
-        strcpy(template_title.path, buffer);
+        strcpy(cur_title_info->path, buffer);
 
         strncpy(gFileInfos[j].name, dirList.GetFilename(i), 255);
         gFileInfos[j].source = 0; //SD Card;
 
         const char *indexedDevice = "mlc";
-        strcpy(template_title.indexedDevice, indexedDevice);
+        strcpy(cur_title_info->indexedDevice, indexedDevice);
 
         // System apps don't have a splash screen.
-        template_title.appType = MCP_APP_TYPE_SYSTEM_APPS;
+        cur_title_info->appType = MCP_APP_TYPE_SYSTEM_APPS;
 
         // Check if the have bootTvTex and bootDrcTex that could be shown.
-        if (StringTools::EndsWith(gFileInfos[j].name, ".wbf")) {
+        if (StringTools::EndsWith(gFileInfos[j].name, ".wuhb")) {
             if (romfsMount("romfscheck", dirList.GetFilepath(i), RomfsSource_FileDescriptor) == 0) {
                 bool foundSplashScreens = true;
                 if (!FSUtils::CheckFile("romfscheck:/meta/bootTvTex.tga") && !FSUtils::CheckFile("romfscheck:/meta/bootTvTex.tga.gz")) {
@@ -178,7 +190,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
                 if (foundSplashScreens) {
                     DEBUG_FUNCTION_LINE("Show splash screens");
                     // Show splash screens
-                    template_title.appType = MCP_APP_TYPE_GAME;
+                    cur_title_info->appType = MCP_APP_TYPE_GAME;
                 }
                 romfsUnmount("romfscheck");
             } else {
@@ -186,20 +198,30 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
             }
         }
 
-        template_title.titleId = TITLE_ID_HOMEBREW_MASK | gFileInfos[j].lowerTitleID;
-        template_title.titleVersion = 1;
-        template_title.groupId = 0x400;
+        cur_title_info->titleId = TITLE_ID_HOMEBREW_MASK | gFileInfos[j].lowerTitleID;
+        cur_title_info->titleVersion = 1;
+        cur_title_info->groupId = 0x400;
 
-        template_title.osVersion = OSGetOSID();
-        template_title.sdkVersion = __OSGetProcessSDKVersion();
-        template_title.unk0x60 = 0;
+        cur_title_info->osVersion = OSGetOSID();
+        cur_title_info->sdkVersion = __OSGetProcessSDKVersion();
+        cur_title_info->unk0x60 = 0;
 
-        DEBUG_FUNCTION_LINE("[%d] %s [%016llX]", j, gFileInfos[j].path, template_title.titleId);
+        DEBUG_FUNCTION_LINE("[%d] %s [%016llX]", j, gFileInfos[j].path, cur_title_info->titleId);
 
-        memcpy(&(titleList[titlecount]), &template_title, sizeof(template_title));
-
-        titlecount++;
         j++;
+    }
+}
+
+DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, MCPTitleListType *titleList, uint32_t size) {
+    int32_t result = real_MCP_TitleList(handle, outTitleCount, titleList, size);
+    uint32_t titlecount = *outTitleCount;
+
+    for (auto &gFileInfo : gFileInfos) {
+        if (gFileInfo.lowerTitleID == 0) {
+            break;
+        }
+        memcpy(&(titleList[titlecount]), &(gFileInfo.titleInfo), sizeof(gFileInfo.titleInfo));
+        titlecount++;
     }
 
     *outTitleCount = titlecount;
@@ -208,15 +230,14 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
 }
 
 DECL_FUNCTION(int32_t, MCP_GetTitleInfoByTitleAndDevice, uint32_t mcp_handle, uint32_t titleid_lower_1, uint32_t titleid_upper, uint32_t titleid_lower_2, uint32_t unknown, MCPTitleListType *title) {
-    if (gHomebrewLaunched) {
-        memcpy(title, &(template_title), sizeof(MCPTitleListType));
-    } else if (titleid_upper == UPPER_TITLE_ID_HOMEBREW) {
-        char buffer[25];
-        snprintf(buffer, 25, "/custom/%08X%08X", titleid_upper, titleid_lower_2);
-        strcpy(template_title.path, buffer);
-        template_title.titleId = TITLE_ID_HOMEBREW_MASK | titleid_lower_1;
-        memcpy(title, &(template_title), sizeof(MCPTitleListType));
-        return 0;
+    if (titleid_upper == UPPER_TITLE_ID_HOMEBREW) {
+        DEBUG_FUNCTION_LINE("%08X %08X", titleid_lower_1, titleid_lower_2);
+        for (auto &gFileInfo : gFileInfos) {
+            if (gFileInfo.lowerTitleID == titleid_lower_2) {
+                memcpy(title, &(gFileInfo.titleInfo), sizeof(MCPTitleListType));
+                return 0;
+            }
+        }
     }
     int result = real_MCP_GetTitleInfoByTitleAndDevice(mcp_handle, titleid_lower_1, titleid_upper, titleid_lower_2, unknown, title);
 
@@ -232,9 +253,8 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
 
             OSDynLoad_Error dyn_res = OSDynLoad_Acquire("homebrew_rpx_loader", &module);
             if (dyn_res != OS_DYNLOAD_OK) {
-                OSFatal("Failed to acquire homebrew_rpx_loader");
+                OSFatal("Missing RPXLoader module");
             }
-
 
             bool (*loadRPXFromSDOnNextLaunch)(const std::string &path);
             dyn_res = OSDynLoad_FindExport(module, false, "loadRPXFromSDOnNextLaunch", reinterpret_cast<void **>(&loadRPXFromSDOnNextLaunch));
@@ -242,7 +262,6 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
                 OSFatal("Failed to find export loadRPXFromSDOnNextLaunch");
             }
 
-            gHomebrewLaunched = TRUE;
             fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32, (title->titleId & 0xFFFFFFFF), &gLaunchXML);
 
             romfs_fileInfo info;
@@ -251,9 +270,9 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
                 loadFileIntoBuffer((title->titleId & 0xFFFFFFFF), "meta/iconTex.tga", gIconCache, sizeof(gIconCache));
             }
 
-            unmountRomfs(id);
+            gHomebrewLaunched = TRUE;
+
             loadRPXFromSDOnNextLaunch(gFileInfos[id].path);
-            mountRomfs(id);
             return 0;
         } else {
             DEBUG_FUNCTION_LINE("Failed to get the id for titleID %016llX", title->titleId);
@@ -385,7 +404,7 @@ DECL_FUNCTION(int32_t, ACPGetTitleMetaDirByDevice, uint32_t titleid_upper, uint3
 DECL_FUNCTION(int32_t, _SYSLaunchTitleByPathFromLauncher, char *pathToLoad, uint32_t u2) {
     const char *start = "/custom/";
     if (strncmp(pathToLoad, start, strlen(start)) == 0) {
-        strcpy(template_title.path, pathToLoad);
+        strcpy(current_launched_title_info.path, pathToLoad);
         uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
         snprintf(pathToLoad, 47, "/vol/storage_mlc01/sys/title/%08x/%08x", (uint32_t) (titleID >> 32), (uint32_t) (0x00000000FFFFFFFF & titleID));
     }
