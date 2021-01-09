@@ -70,7 +70,7 @@ int32_t getRPXInfoForID(uint32_t id, romfs_fileInfo *info) {
     snprintf(romName, 10, "%08X", id);
 
     char root[12];
-    snprintf(root, 12, "%08X:/", id);
+    snprintf(root, 12, "%08X:/code/", id);
 
     if (!(dir = opendir(root))) {
         return -2;
