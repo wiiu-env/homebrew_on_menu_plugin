@@ -1,5 +1,4 @@
 #include <wups.h>
-#include <cstdio>
 #include <cstring>
 #include <coreinit/debug.h>
 #include <coreinit/title.h>
@@ -10,7 +9,6 @@
 #include <sysapp/title.h>
 #include <coreinit/dynload.h>
 #include <nn/acp.h>
-#include <coreinit/ios.h>
 #include <utils/logger.h>
 #include "utils/StringTools.h"
 #include <fs/DirList.h>
@@ -20,7 +18,7 @@
 #include "fs/FSUtils.h"
 #include "romfs_helper.h"
 #include "filelist.h"
-#include "utils/utils.h"
+#include "utils/ini.h"
 
 typedef struct ACPMetaData {
     char bootmovie[80696];
@@ -85,9 +83,9 @@ void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXm
         return;
     }
     out_buf->title_id = ((uint64_t) titleid_upper * 0x100000000) + titleid_lower;
-    strncpy(out_buf->longname_en, gFileInfos[id].name, 511);
-    strncpy(out_buf->shortname_en, gFileInfos[id].name, 255);
-    strncpy(out_buf->publisher_en, gFileInfos[id].name, 255);
+    strncpy(out_buf->longname_en, gFileInfos[id].longname, 64);
+    strncpy(out_buf->shortname_en, gFileInfos[id].shortname, 64);
+    strncpy(out_buf->publisher_en, gFileInfos[id].author, 64);
     out_buf->e_manual = 1;
     out_buf->e_manual_version = 0;
     out_buf->title_version = 1;
@@ -118,6 +116,23 @@ unsigned int hash(char *str) {
         h = 37 * h + *p;
     }
     return h; // or, h % ARRAY_SIZE;
+}
+
+static int handler(void *user, const char *section, const char *name,
+                   const char *value) {
+    auto *fInfo = (FileInfos *) user;
+#define MATCH(s, n) strcmp(section, s) == 0 && strcmp(name, n) == 0
+    if (MATCH("menu", "longname")) {
+        strncpy(fInfo->longname, value, 64-1);
+    } else if (MATCH("menu", "shortname")) {
+        strncpy(fInfo->shortname, value, 64-1);
+    } else if (MATCH("menu", "author")) {
+        strncpy(fInfo->author, value, 64-1);
+    } else {
+        return 0;  /* unknown section/name, error */
+    }
+
+    return 1;
 }
 
 void readCustomTitlesFromSD() {
@@ -168,7 +183,10 @@ void readCustomTitlesFromSD() {
         snprintf(buffer, 25, "/custom/%08X%08X", UPPER_TITLE_ID_HOMEBREW, gFileInfos[j].lowerTitleID);
         strcpy(cur_title_info->path, buffer);
 
-        strncpy(gFileInfos[j].name, dirList.GetFilename(i), 255);
+        strncpy(gFileInfos[j].filename, dirList.GetFilename(i), 255);
+        strncpy(gFileInfos[j].longname, dirList.GetFilename(i), 64);
+        strncpy(gFileInfos[j].shortname, dirList.GetFilename(i), 64);
+        strncpy(gFileInfos[j].author, dirList.GetFilename(i), 64);
         gFileInfos[j].source = 0; //SD Card;
 
         const char *indexedDevice = "mlc";
@@ -177,9 +195,15 @@ void readCustomTitlesFromSD() {
         // System apps don't have a splash screen.
         cur_title_info->appType = MCP_APP_TYPE_SYSTEM_APPS;
 
+
         // Check if the have bootTvTex and bootDrcTex that could be shown.
-        if (StringTools::EndsWith(gFileInfos[j].name, ".wuhb")) {
+        if (StringTools::EndsWith(gFileInfos[j].filename, ".wuhb")) {
             if (romfsMount("romfscheck", dirList.GetFilepath(i), RomfsSource_FileDescriptor) == 0) {
+                if (ini_parse("romfscheck:/meta/meta.ini", handler, &gFileInfos[j]) < 0) {
+
+                    DEBUG_FUNCTION_LINE("Failed to load and parse meta.ini");
+                }
+
                 bool foundSplashScreens = true;
                 if (!FSUtils::CheckFile("romfscheck:/meta/bootTvTex.tga") && !FSUtils::CheckFile("romfscheck:/meta/bootTvTex.tga.gz")) {
                     foundSplashScreens = false;
@@ -194,7 +218,8 @@ void readCustomTitlesFromSD() {
                 }
                 romfsUnmount("romfscheck");
             } else {
-                //DEBUG_FUNCTION_LINE("Mounting %s failed", dirList.GetFilepath(i));
+                DEBUG_FUNCTION_LINE("%s is not a valid .wuhb file", dirList.GetFilepath(i));
+                continue;
             }
         }
 

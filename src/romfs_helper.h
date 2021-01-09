@@ -6,7 +6,10 @@
 
 typedef struct WUT_PACKED FileInfos_ {
     char path[256];
-    char name[256];
+    char filename[256];
+    char shortname[64];
+    char longname[64];
+    char author[64];
     int32_t source;
     uint32_t lowerTitleID;
     bool romfsMounted;
