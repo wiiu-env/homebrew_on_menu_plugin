@@ -483,18 +483,6 @@ DECL_FUNCTION(uint32_t, MCP_RightCheckLaunchable, uint32_t *u1, uint32_t *u2, ui
 }
 
 /*
- * Patch the meta xml for the home menu
- */
-DECL_FUNCTION(int32_t, HBM_NN_ACP_ACPGetTitleMetaXmlByDevice, uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *metaxml, uint32_t device) {
-    if (gHomebrewLaunched) {
-        memcpy(metaxml, &gLaunchXML, sizeof(gLaunchXML));
-        return 0;
-    }
-    int result = real_HBM_NN_ACP_ACPGetTitleMetaXmlByDevice(titleid_upper, titleid_lower, metaxml, device);
-    return result;
-}
-
-/*
  * Patch the boot movie and and boot logo
  */
 DECL_FUNCTION(uint32_t, ACPGetLaunchMetaData, struct ACPMetaData *metadata) {
@@ -505,14 +493,12 @@ DECL_FUNCTION(uint32_t, ACPGetLaunchMetaData, struct ACPMetaData *metadata) {
         memcpy(metadata->bootlogo, bootLogoTex_tga, bootLogoTex_tga_size);
         DCFlushRange(metadata->bootmovie, bootMovie_h264_size);
         DCFlushRange(metadata->bootlogo, bootMovie_h264_size);
-
     }
 
     return result;
 }
 
 
-WUPS_MUST_REPLACE_PHYSICAL_FOR_PROCESS(HBM_NN_ACP_ACPGetTitleMetaXmlByDevice, 0x2E36CE44, 0x0E36CE44, WUPS_FP_TARGET_PROCESS_HOME_MENU);
 WUPS_MUST_REPLACE(ACPGetApplicationBox, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetApplicationBox);
 WUPS_MUST_REPLACE(PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg, WUPS_LOADER_LIBRARY_DRMAPP, PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg);
 WUPS_MUST_REPLACE(MCP_RightCheckLaunchable, WUPS_LOADER_LIBRARY_COREINIT, MCP_RightCheckLaunchable);
