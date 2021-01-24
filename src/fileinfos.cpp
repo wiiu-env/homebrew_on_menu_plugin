@@ -1,8 +1,8 @@
-#include "romfs_helper.h"
-#include "utils/logger.h"
-#include "utils/StringTools.h"
+#include <cstring>
 #include <stdio.h>
-#include <sys/dir.h>
+#include <rpxloader.h>
+#include "utils/logger.h"
+#include "fileinfos.h"
 
 FileInfos gFileInfos[FILE_INFO_SIZE] __attribute__((section(".data")));
 
@@ -23,7 +23,7 @@ void unmountRomfs(uint32_t id) {
         char romName[10];
         snprintf(romName, 10, "%08X", id);
         DEBUG_FUNCTION_LINE("Unmounting %s", romName);
-        int res = romfsUnmount(romName);
+        int res = RL_UnmountBundle(romName);
         DEBUG_FUNCTION_LINE("res: %d", res);
         gFileInfos[id].romfsMounted = false;
     }
@@ -47,7 +47,7 @@ bool mountRomfs(uint32_t id) {
         snprintf(romName, 10, "%08X", id);
         DEBUG_FUNCTION_LINE("Mount %s as %s", buffer, romName);
         int32_t  res = 0;
-        if ((res = romfsMount(romName, buffer, RomfsSource_FileDescriptor_CafeOS)) == 0) {
+        if ((res = RL_MountBundle(romName, buffer, BundleSource_FileDescriptor_CafeOS)) == 0) {
             DEBUG_FUNCTION_LINE("Mounted successfully ");
             gFileInfos[id].romfsMounted = true;
             return true;
@@ -57,40 +57,4 @@ bool mountRomfs(uint32_t id) {
         }
     }
     return true;
-}
-
-
-int32_t getRPXInfoForID(uint32_t id, romfs_fileInfo *info) {
-    if (!mountRomfs(id)) {
-        return -1;
-    }
-    DIR *dir;
-    struct dirent *entry;
-    char romName[10];
-    snprintf(romName, 10, "%08X", id);
-
-    char root[12];
-    snprintf(root, 12, "%08X:/code/", id);
-
-    if (!(dir = opendir(root))) {
-        return -2;
-    }
-    bool found = false;
-    int res = -3;
-    while ((entry = readdir(dir)) != NULL) {
-        if (StringTools::EndsWith(entry->d_name, ".rpx")) {
-            if (romfsGetFileInfoPerPath(romName, entry->d_name, info) >= 0) {
-                found = true;
-                res = 0;
-            }
-            break;
-        }
-    }
-
-    closedir(dir);
-
-    if (!found) {
-        return -4;
-    }
-    return res;
 }

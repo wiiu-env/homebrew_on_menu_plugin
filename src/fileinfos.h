@@ -1,8 +1,7 @@
 #pragma once
+
 #include <cstdint>
 #include <coreinit/mcp.h>
-
-#include <romfs_dev.h>
 
 typedef struct WUT_PACKED FileInfos_ {
     char path[256];
@@ -22,10 +21,8 @@ extern FileInfos gFileInfos[FILE_INFO_SIZE];
 
 int32_t getIDByLowerTitleID(uint32_t lowerTitleID);
 
-void unmountAllRomfs();
-
 void unmountRomfs(uint32_t id);
 
-bool mountRomfs(uint32_t id);
+void unmountAllRomfs();
 
-int32_t getRPXInfoForID(uint32_t id, romfs_fileInfo *info);
+bool mountRomfs(uint32_t id);

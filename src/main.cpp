@@ -12,13 +12,13 @@
 #include <utils/logger.h>
 #include "utils/StringTools.h"
 #include <fs/DirList.h>
-#include <romfs_dev.h>
-#include "readFileWrapper.h"
+#include "fileinfos.h"
 #include <whb/log_udp.h>
+#include <rpxloader.h>
 #include "fs/FSUtils.h"
-#include "romfs_helper.h"
 #include "filelist.h"
 #include "utils/ini.h"
+#include "FileWrapper.h"
 
 typedef struct ACPMetaData {
     char bootmovie[80696];
@@ -48,7 +48,6 @@ INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
     memset((void *) &gLaunchXML, 0, sizeof(gLaunchXML));
     memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
-    memset((void *) &gFileReadInformation, 0, sizeof(gFileReadInformation));
     memset((void *) &gIconCache, 0, sizeof(gIconCache));
     gHomebrewLaunched = FALSE;
 }
@@ -69,8 +68,6 @@ ON_APPLICATION_START(args) {
 }
 
 ON_APPLICATION_END() {
-    DeInitAllFiles();
-    unmountAllRomfs();
 }
 
 void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *out_buf) {
@@ -122,12 +119,14 @@ static int handler(void *user, const char *section, const char *name,
                    const char *value) {
     auto *fInfo = (FileInfos *) user;
 #define MATCH(s, n) strcmp(section, s) == 0 && strcmp(name, n) == 0
+
+    DEBUG_FUNCTION_LINE("%s %s %s", section, name, value);
     if (MATCH("menu", "longname")) {
-        strncpy(fInfo->longname, value, 64-1);
+        strncpy(fInfo->longname, value, 64 - 1);
     } else if (MATCH("menu", "shortname")) {
-        strncpy(fInfo->shortname, value, 64-1);
+        strncpy(fInfo->shortname, value, 64 - 1);
     } else if (MATCH("menu", "author")) {
-        strncpy(fInfo->author, value, 64-1);
+        strncpy(fInfo->author, value, 64 - 1);
     } else {
         return 0;  /* unknown section/name, error */
     }
@@ -157,6 +156,11 @@ void readCustomTitlesFromSD() {
 
         //! skip wiiload temp files
         if (strcasecmp(dirList.GetFilename(i), "temp.wuhb") == 0) {
+            continue;
+        }
+
+        //! skip wiiload temp files
+        if (strcasecmp(dirList.GetFilename(i), "temp2.wuhb") == 0) {
             continue;
         }
 
@@ -195,20 +199,37 @@ void readCustomTitlesFromSD() {
         // System apps don't have a splash screen.
         cur_title_info->appType = MCP_APP_TYPE_SYSTEM_APPS;
 
-
         // Check if the have bootTvTex and bootDrcTex that could be shown.
         if (StringTools::EndsWith(gFileInfos[j].filename, ".wuhb")) {
-            if (romfsMount("romfscheck", dirList.GetFilepath(i), RomfsSource_FileDescriptor) == 0) {
-                if (ini_parse("romfscheck:/meta/meta.ini", handler, &gFileInfos[j]) < 0) {
+            if (RL_MountBundle("romfscheck", dirList.GetFilepath(i), BundleSource_FileDescriptor) == 0) {
+                uint32_t file_handle = 0;
+                if (RL_FileOpen("romfscheck:/meta/meta.ini", &file_handle) == 0) {
+                    // this buffer should be big enough for our .ini
+                    char ini_buffer[0x1000];
+                    memset(ini_buffer, 0, sizeof(ini_buffer));
+                    uint32_t offset = 0;
+                    uint32_t toRead = sizeof(ini_buffer);
+                    do {
+                        int res = RL_FileRead(file_handle, reinterpret_cast<uint8_t *>(&ini_buffer[offset]), toRead);
+                        if (res <= 0) {
+                            break;
+                        }
+                        offset += res;
+                        toRead -= res;
+                    } while (offset < sizeof(ini_buffer));
 
-                    DEBUG_FUNCTION_LINE("Failed to load and parse meta.ini");
+                    if (ini_parse_string(ini_buffer, handler, &gFileInfos[j]) < 0) {
+                        DEBUG_FUNCTION_LINE("Failed to parse ini")
+                    }
+
+                    RL_FileClose(file_handle);
                 }
 
                 bool foundSplashScreens = true;
-                if (!FSUtils::CheckFile("romfscheck:/meta/bootTvTex.tga") && !FSUtils::CheckFile("romfscheck:/meta/bootTvTex.tga.gz")) {
+                if (!RL_FileExists("romfscheck:/meta/bootTvTex.tga")) {
                     foundSplashScreens = false;
                 }
-                if (!FSUtils::CheckFile("romfscheck:/meta/bootDrcTex.tga") && !FSUtils::CheckFile("romfscheck:/meta/bootDrcTex.tga.gz")) {
+                if (!RL_FileExists("romfscheck:/meta/bootDrcTex.tga")) {
                     foundSplashScreens = false;
                 }
                 if (foundSplashScreens) {
@@ -216,7 +237,7 @@ void readCustomTitlesFromSD() {
                     // Show splash screens
                     cur_title_info->appType = MCP_APP_TYPE_GAME;
                 }
-                romfsUnmount("romfscheck");
+                RL_UnmountBundle("romfscheck");
             } else {
                 DEBUG_FUNCTION_LINE("%s is not a valid .wuhb file", dirList.GetFilepath(i));
                 continue;
@@ -274,30 +295,48 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
         int32_t id = getIDByLowerTitleID(title->titleId & 0xFFFFFFFF);
         if (id >= 0) {
             DEBUG_FUNCTION_LINE("Starting a homebrew title");
-            OSDynLoad_Module module;
-
-            OSDynLoad_Error dyn_res = OSDynLoad_Acquire("homebrew_rpx_loader", &module);
-            if (dyn_res != OS_DYNLOAD_OK) {
-                OSFatal("Missing RPXLoader module");
-            }
-
-            bool (*loadRPXFromSDOnNextLaunch)(const std::string &path);
-            dyn_res = OSDynLoad_FindExport(module, false, "loadRPXFromSDOnNextLaunch", reinterpret_cast<void **>(&loadRPXFromSDOnNextLaunch));
-            if (dyn_res != OS_DYNLOAD_OK) {
-                OSFatal("Failed to find export loadRPXFromSDOnNextLaunch");
-            }
 
             fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32, (title->titleId & 0xFFFFFFFF), &gLaunchXML);
 
-            romfs_fileInfo info;
-            int res = getRPXInfoForID(id, &info);
-            if (res >= 0) {
-                loadFileIntoBuffer((title->titleId & 0xFFFFFFFF), "meta/iconTex.tga", gIconCache, sizeof(gIconCache));
+            std::string bundleFilePath = std::string("/vol/external01/") + gFileInfos[id].path;
+
+            bool iconCached = false;
+
+            if (RL_MountBundle("iconread", bundleFilePath.c_str(), BundleSource_FileDescriptor_CafeOS)) {
+                DEBUG_FUNCTION_LINE("Mounted file");
+                uint32_t file_handle = 0;
+                if (RL_FileOpen("iconread:/meta/iconTex.tga", &file_handle) == 0) {
+                    DEBUG_FUNCTION_LINE("Opened file");
+                    uint32_t offset = 0;
+                    uint32_t toRead = sizeof(gIconCache);
+                    do {
+                        int res = RL_FileRead(file_handle, reinterpret_cast<uint8_t *>(&gIconCache[offset]), toRead);
+                        DEBUG_FUNCTION_LINE("Read returned %d", res);
+                        if (res <= 0) {
+                            break;
+                        }
+                        offset += res;
+                        toRead -= res;
+                    } while (offset < sizeof(gIconCache));
+                    iconCached = true;
+                    RL_FileClose(file_handle);
+                } else {
+                    DEBUG_FUNCTION_LINE("failed to open")
+                }
+                DEBUG_FUNCTION_LINE("closed")
+                RL_UnmountBundle("iconread");
+            } else {
+                DEBUG_FUNCTION_LINE("Failed to mount");
+            }
+
+            if (!iconCached) {
+                DEBUG_FUNCTION_LINE("Use default icon");
+                memcpy(gIconCache, iconTex_tga, iconTex_tga_size);
             }
 
             gHomebrewLaunched = TRUE;
 
-            loadRPXFromSDOnNextLaunch(gFileInfos[id].path);
+            RL_LoadFromSDOnNextLaunch(gFileInfos[id].path);
             return 0;
         } else {
             DEBUG_FUNCTION_LINE("Failed to get the id for titleID %016llX", title->titleId);
@@ -318,6 +357,7 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
     if (StringTools::EndsWith(path, icon) || StringTools::EndsWith(path, sound)) {
         if (strncmp(path, start, strlen(start)) == 0) {
             int res = FS_STATUS_NOT_FOUND;
+
             if (StringTools::EndsWith(path, iconTex)) {
                 // fallback to dummy icon if loaded homebrew is no .wbf
                 *handle = 0x13371338;
@@ -333,19 +373,11 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
             if (idVal < 0) {
                 DEBUG_FUNCTION_LINE("Failed to find id for titleID %08X", lowerTitleID);
             } else {
-                if (FSOpenFile_for_ID(idVal, ending, handle) < 0) {
+                if (OpenFileForID(idVal, ending, handle) < 0) {
                     return res;
                 }
             }
             return FS_STATUS_OK;
-        } else if (gHomebrewLaunched) {
-            if (StringTools::EndsWith(path, iconTex)) {
-                *handle = 0x13371337;
-                return FS_STATUS_OK;
-            } else {
-                DEBUG_FUNCTION_LINE("%s", path);
-            }
-
         }
     }
 
@@ -354,35 +386,28 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
 }
 
 DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFileHandle handle, uint32_t flags) {
-    if (handle == 0x13371337 || handle == 0x13371338) {
+    if (handle == 0x13371338) {
         return FS_STATUS_OK;
-    }
-    if ((handle & 0xFF000000) == 0xFF000000) {
+    } else if ((handle & 0xFF000000) == 0xFF000000) {
         int32_t fd = (handle & 0x00000FFF);
         int32_t romid = (handle & 0x00FFF000) >> 12;
         DEBUG_FUNCTION_LINE("Close %d %d", fd, romid);
-        DeInitFile(fd);
+        uint32_t rl_handle = gFileHandleWrapper[fd].handle;
+        RL_FileClose(rl_handle);
         if (gFileInfos[romid].openedFiles--) {
+            DCFlushRange(&gFileInfos[romid].openedFiles, 4);
             if (gFileInfos[romid].openedFiles <= 0) {
                 DEBUG_FUNCTION_LINE("unmount romfs no more handles");
                 unmountRomfs(romid);
             }
         }
-        //unmountAllRomfs();
         return FS_STATUS_OK;
     }
     return real_FSCloseFile(client, block, handle, flags);
 }
 
 DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t *buffer, uint32_t size, uint32_t count, FSFileHandle handle, uint32_t unk1, uint32_t flags) {
-    if (handle == 0x13371337) {
-        uint32_t cpySize = size * count;
-        if (sizeof(gIconCache) < cpySize) {
-            cpySize = sizeof(gIconCache);
-        }
-        memcpy(buffer, gIconCache, cpySize);
-        return (FSStatus) (cpySize / size);
-    } else if (handle == 0x13371338) {
+    if (handle == 0x13371338) {
         uint32_t cpySize = size * count;
         if (iconTex_tga_size < cpySize) {
             cpySize = iconTex_tga_size;
@@ -390,14 +415,15 @@ DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t
         memcpy(buffer, iconTex_tga, cpySize);
         DEBUG_FUNCTION_LINE("DUMMY");
         return (FSStatus) (cpySize / size);
-    }
-    if ((handle & 0xFF000000) == 0xFF000000) {
+    } else if ((handle & 0xFF000000) == 0xFF000000) {
         int32_t fd = (handle & 0x00000FFF);
         int32_t romid = (handle & 0x00FFF000) >> 12;
 
-        DEBUG_FUNCTION_LINE("READ %d from %d rom: %d", size * count, fd, romid);
+        uint32_t rl_handle = gFileHandleWrapper[fd].handle;
 
-        int readSize = readFile(fd, buffer, (size * count));
+        DEBUG_FUNCTION_LINE("READ %d from %d (%08X) rom: %d", size * count, fd, rl_handle, romid);
+
+        int readSize = RL_FileRead(rl_handle, buffer, (size * count));
 
         return (FSStatus) (readSize / size);
     }
