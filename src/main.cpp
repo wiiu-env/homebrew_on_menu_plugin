@@ -7,7 +7,6 @@
 #include <coreinit/mcp.h>
 #include <coreinit/filesystem.h>
 #include <sysapp/title.h>
-#include <coreinit/dynload.h>
 #include <nn/acp.h>
 #include <utils/logger.h>
 #include "utils/StringTools.h"
@@ -39,8 +38,16 @@ char gIconCache[65580] __attribute__((section(".data")));
 ACPMetaXml gLaunchXML __attribute__((section(".data")));
 MCPTitleListType current_launched_title_info __attribute__((section(".data")));
 BOOL gHomebrewLaunched __attribute__((section(".data")));
+bool doReboot = false;
+
+bool lastResult = false;
+uint32_t sd_check_cooldown = 0;
+
+extern FSClient *__wut_devoptab_fs_client;
 
 void readCustomTitlesFromSD();
+
+extern "C" void _SYSLaunchTitleWithStdArgsInNoSplash(uint64_t, uint32_t);
 
 WUPS_USE_WUT_CRT()
 
@@ -65,9 +72,47 @@ ON_APPLICATION_START(args) {
         DEBUG_FUNCTION_LINE("gHomebrewLaunched to FALSE");
         gHomebrewLaunched = FALSE;
     }
+    doReboot = false;
 }
 
-ON_APPLICATION_END() {
+ON_VYSNC() {
+    if (doReboot) {
+        return;
+    }
+    if (++sd_check_cooldown < 120) {
+        return;
+    }
+    sd_check_cooldown = 0;
+
+    DIR *dir;
+
+    dir = opendir("fs:/vol/external01/");
+    if (dir == nullptr) {
+        if (!lastResult) {
+            FSCmdBlock cmd;
+            FSMountSource mountSource;
+            FSStatus result;
+
+            FSInitCmdBlock(&cmd);
+            result = FSGetMountSource(__wut_devoptab_fs_client, &cmd, FS_MOUNT_SOURCE_SD, &mountSource, FS_ERROR_FLAG_ALL);
+            if (result >= 0) {
+                DEBUG_FUNCTION_LINE("SD mount successful");
+                _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), 0);
+                doReboot = true;
+            }
+            return;
+        } else {
+            lastResult = false;
+            DEBUG_FUNCTION_LINE("SD was ejected");
+            _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), 0);
+            doReboot = true;
+            return;
+        }
+    }
+    // DEBUG_FUNCTION_LINE("SD is mounted");
+
+    closedir(dir);
+    lastResult = true;
 }
 
 void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *out_buf) {
