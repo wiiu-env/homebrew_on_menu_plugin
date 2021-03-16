@@ -76,6 +76,11 @@ ON_APPLICATION_START(args) {
 }
 
 ON_VYSNC() {
+     if (OSGetTitleID() != 0x0005001010040000L && // Wii U Menu JPN
+        OSGetTitleID() != 0x0005001010040100L && // Wii U Menu USA
+        OSGetTitleID() != 0x0005001010040200L) { // Wii U Menu ERU
+        return;
+    }
     if (doReboot) {
         return;
     }
