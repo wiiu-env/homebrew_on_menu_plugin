@@ -347,7 +347,7 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
 
             bool iconCached = false;
 
-            if (RL_MountBundle("iconread", bundleFilePath.c_str(), BundleSource_FileDescriptor_CafeOS)) {
+            if (RL_MountBundle("iconread", bundleFilePath.c_str(), BundleSource_FileDescriptor_CafeOS) == 0) {
                 DEBUG_FUNCTION_LINE("Mounted file");
                 uint32_t file_handle = 0;
                 if (RL_FileOpen("iconread:/meta/iconTex.tga", &file_handle) == 0) {
