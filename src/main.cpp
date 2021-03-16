@@ -49,7 +49,7 @@ void readCustomTitlesFromSD();
 
 extern "C" void _SYSLaunchTitleWithStdArgsInNoSplash(uint64_t, uint32_t);
 
-WUPS_USE_WUT_CRT()
+WUPS_USE_WUT_DEVOPTAB()
 
 INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
@@ -59,7 +59,7 @@ INITIALIZE_PLUGIN() {
     gHomebrewLaunched = FALSE;
 }
 
-ON_APPLICATION_START(args) {
+ON_APPLICATION_START() {
     WHBLogUdpInit();
 
     if (OSGetTitleID() == 0x0005001010040000L || // Wii U Menu JPN
