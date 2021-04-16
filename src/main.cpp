@@ -325,21 +325,6 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
     return result;
 }
 
-DECL_FUNCTION(int32_t, MCP_GetTitleInfoByTitleAndDevice, uint32_t mcp_handle, uint32_t titleid_lower_1, uint32_t titleid_upper, uint32_t titleid_lower_2, uint32_t unknown, MCPTitleListType *title) {
-    if (titleid_upper == UPPER_TITLE_ID_HOMEBREW) {
-        DEBUG_FUNCTION_LINE("%08X %08X", titleid_lower_1, titleid_lower_2);
-        for (auto &gFileInfo : gFileInfos) {
-            if (gFileInfo.lowerTitleID == titleid_lower_2) {
-                memcpy(title, &(gFileInfo.titleInfo), sizeof(MCPTitleListType));
-                return 0;
-            }
-        }
-    }
-    int result = real_MCP_GetTitleInfoByTitleAndDevice(mcp_handle, titleid_lower_1, titleid_upper, titleid_lower_2, unknown, title);
-
-    return result;
-}
-
 DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *title, uint32_t u2) {
     if ((title->titleId & TITLE_ID_HOMEBREW_MASK) == TITLE_ID_HOMEBREW_MASK) {
         int32_t id = getIDByLowerTitleID(title->titleId & 0xFFFFFFFF);
@@ -349,7 +334,7 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
             fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32, (title->titleId & 0xFFFFFFFF), &gLaunchXML);
 
             std::string bundleFilePath = std::string("/vol/external01/") + gFileInfos[id].path;
-
+    
             bool iconCached = false;
 
             if (RL_MountBundle("iconread", bundleFilePath.c_str(), BundleSource_FileDescriptor_CafeOS) == 0) {
@@ -574,13 +559,83 @@ DECL_FUNCTION(uint32_t, ACPGetLaunchMetaData, struct ACPMetaData *metadata) {
     return result;
 }
 
+typedef struct TitleVersionInfo TitleVersionInfo;
 
+struct WUT_PACKED TitleVersionInfo {
+    uint16_t currentVersion;
+    uint16_t neededVersion;
+    uint8_t needsUpdate;
+};
+WUT_CHECK_OFFSET(TitleVersionInfo, 0x00, currentVersion);
+WUT_CHECK_OFFSET(TitleVersionInfo, 0x02, neededVersion);
+WUT_CHECK_OFFSET(TitleVersionInfo, 0x04, needsUpdate);
+WUT_CHECK_SIZE(TitleVersionInfo, 0x05);
+
+
+DECL_FUNCTION(uint32_t, GetTitleVersionInfo__Q2_2nn4vctlFPQ3_2nn4vctl16TitleVersionInfoULQ3_2nn4Cafe9MediaType, TitleVersionInfo *titleVersionInfo, uint32_t u2, uint32_t u3, uint32_t u4, uint32_t u5) {
+    int32_t result = real_GetTitleVersionInfo__Q2_2nn4vctlFPQ3_2nn4vctl16TitleVersionInfoULQ3_2nn4Cafe9MediaType(titleVersionInfo, u2, u3, u4, u5);
+
+    if (result < 0) {
+        // Fake result if it's H&S
+        uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
+        uint32_t expected_u3 = (uint32_t) (titleID >> 32);
+        uint32_t expected_u4 = (uint32_t) (0x00000000FFFFFFFF & titleID);
+
+        if (expected_u3 == u3 && expected_u4 == u4) {
+            if (titleVersionInfo != nullptr) {
+                titleVersionInfo->currentVersion = 129;
+                titleVersionInfo->neededVersion = 129;
+                titleVersionInfo->needsUpdate = 0;
+            }
+            return 0;
+        }
+    }
+
+    return result;
+}
+
+DECL_FUNCTION(uint32_t, GetUpdateInfo__Q2_2nn4vctlFPQ3_2nn4vctl10UpdateInfoULQ3_2nn4Cafe9MediaType, uint32_t u1, uint32_t u2, uint32_t u3, uint32_t u4, uint32_t u5, uint32_t u6) {
+    uint32_t result = real_GetUpdateInfo__Q2_2nn4vctlFPQ3_2nn4vctl10UpdateInfoULQ3_2nn4Cafe9MediaType(u1, u2, u3, u4, u5, u6);
+
+    uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
+    uint32_t expected_u3 = (uint32_t) (titleID >> 32);
+    uint32_t expected_u4 = (uint32_t) (0x00000000FFFFFFFF & titleID);
+
+    if (expected_u3 == u3 && expected_u4 == u4) {
+        DEBUG_FUNCTION_LINE("Fake result to 0xa121f480");
+        return 0xa121f480;
+    }
+
+    return
+            result;
+}
+
+DECL_FUNCTION(uint32_t, MCPGetTitleInternal, uint32_t mcp_handle, void *input, uint32_t type, MCPTitleListType *titles, uint32_t out_cnt) {
+    if (input != nullptr) {
+        auto *inputPtrAsU32 = (uint32_t *) input;
+        if (inputPtrAsU32[0] == UPPER_TITLE_ID_HOMEBREW && out_cnt >= 1) {
+            for (auto &gFileInfo : gFileInfos) {
+                if (gFileInfo.lowerTitleID == inputPtrAsU32[1]) {
+                    memcpy(&titles[0], &(gFileInfo.titleInfo), sizeof(MCPTitleListType));
+                    return 1;
+                }
+            }
+            DEBUG_FUNCTION_LINE("Failed to find lower TID %08X", inputPtrAsU32[1]);
+        }
+    }
+
+    uint32_t result = real_MCPGetTitleInternal(mcp_handle, input, type, titles, out_cnt);
+
+    return result;
+}
+
+WUPS_MUST_REPLACE(GetTitleVersionInfo__Q2_2nn4vctlFPQ3_2nn4vctl16TitleVersionInfoULQ3_2nn4Cafe9MediaType, WUPS_LOADER_LIBRARY_NN_VCTL, GetTitleVersionInfo__Q2_2nn4vctlFPQ3_2nn4vctl16TitleVersionInfoULQ3_2nn4Cafe9MediaType);
+WUPS_MUST_REPLACE(GetUpdateInfo__Q2_2nn4vctlFPQ3_2nn4vctl10UpdateInfoULQ3_2nn4Cafe9MediaType, WUPS_LOADER_LIBRARY_NN_VCTL, GetUpdateInfo__Q2_2nn4vctlFPQ3_2nn4vctl10UpdateInfoULQ3_2nn4Cafe9MediaType);
 WUPS_MUST_REPLACE(ACPGetApplicationBox, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetApplicationBox);
 WUPS_MUST_REPLACE(PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg, WUPS_LOADER_LIBRARY_DRMAPP, PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg);
 WUPS_MUST_REPLACE(MCP_RightCheckLaunchable, WUPS_LOADER_LIBRARY_COREINIT, MCP_RightCheckLaunchable);
 
 WUPS_MUST_REPLACE(MCP_TitleList, WUPS_LOADER_LIBRARY_COREINIT, MCP_TitleList);
-WUPS_MUST_REPLACE(MCP_GetTitleInfoByTitleAndDevice, WUPS_LOADER_LIBRARY_COREINIT, MCP_GetTitleInfoByTitleAndDevice);
 
 WUPS_MUST_REPLACE(ACPCheckTitleLaunchByTitleListTypeEx, WUPS_LOADER_LIBRARY_NN_ACP, ACPCheckTitleLaunchByTitleListTypeEx);
 WUPS_MUST_REPLACE(ACPGetTitleMetaXmlByDevice, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetTitleMetaXmlByDevice);
@@ -592,3 +647,5 @@ WUPS_MUST_REPLACE(ACPGetLaunchMetaData, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetLaunch
 WUPS_MUST_REPLACE(FSReadFile, WUPS_LOADER_LIBRARY_COREINIT, FSReadFile);
 WUPS_MUST_REPLACE(FSOpenFile, WUPS_LOADER_LIBRARY_COREINIT, FSOpenFile);
 WUPS_MUST_REPLACE(FSCloseFile, WUPS_LOADER_LIBRARY_COREINIT, FSCloseFile);
+
+WUPS_MUST_REPLACE_PHYSICAL(MCPGetTitleInternal, (0x3001C400 + 0x0205a590), (0x0205a590 - 0xFE3C00));

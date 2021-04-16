@@ -9,7 +9,7 @@ void dumpHex(const void *data, size_t size) {
     char ascii[17];
     size_t i, j;
     ascii[16] = '\0';
-    DEBUG_FUNCTION_LINE("0x%08X (0x0000): ", data);
+    DEBUG_FUNCTION_LINE_WRITE("0x%08X (0x0000): ", data);
     for (i = 0; i < size; ++i) {
         WHBLogWritef("%02X ", ((unsigned char *) data)[i]);
         if (((unsigned char *) data)[i] >= ' ' && ((unsigned char *) data)[i] <= '~') {
@@ -22,7 +22,7 @@ void dumpHex(const void *data, size_t size) {
             if ((i + 1) % 16 == 0) {
                 WHBLogPrintf("|  %s ", ascii);
                 if (i + 1 < size) {
-                    DEBUG_FUNCTION_LINE("0x%08X (0x%04X); ", data + i + 1, i + 1);
+                    DEBUG_FUNCTION_LINE_WRITE("0x%08X (0x%04X); ", data + i + 1, i + 1);
                 }
             } else if (i + 1 == size) {
                 ascii[(i + 1) % 16] = '\0';
