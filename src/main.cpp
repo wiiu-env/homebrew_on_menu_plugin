@@ -49,7 +49,7 @@ void readCustomTitlesFromSD();
 
 extern "C" void _SYSLaunchTitleWithStdArgsInNoSplash(uint64_t, uint32_t);
 
-WUPS_USE_WUT_DEVOPTAB()
+WUPS_USE_WUT_DEVOPTAB();
 
 INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
@@ -75,7 +75,8 @@ ON_APPLICATION_START() {
     doReboot = false;
 }
 
-ON_VYSNC() {
+DECL_FUNCTION(void, GX2SwapScanBuffers, void) {
+    real_GX2SwapScanBuffers();
      if (OSGetTitleID() != 0x0005001010040000L && // Wii U Menu JPN
         OSGetTitleID() != 0x0005001010040100L && // Wii U Menu USA
         OSGetTitleID() != 0x0005001010040200L) { // Wii U Menu ERU
@@ -251,7 +252,8 @@ void readCustomTitlesFromSD() {
 
         // Check if the have bootTvTex and bootDrcTex that could be shown.
         if (StringTools::EndsWith(gFileInfos[j].filename, ".wuhb")) {
-            if (RL_MountBundle("romfscheck", dirList.GetFilepath(i), BundleSource_FileDescriptor) == 0) {
+            int result = 0;
+            if ((result = RL_MountBundle("romfscheck", dirList.GetFilepath(i), BundleSource_FileDescriptor)) == 0) {
                 uint32_t file_handle = 0;
                 if (RL_FileOpen("romfscheck:/meta/meta.ini", &file_handle) == 0) {
                     // this buffer should be big enough for our .ini
@@ -289,7 +291,7 @@ void readCustomTitlesFromSD() {
                 }
                 RL_UnmountBundle("romfscheck");
             } else {
-                DEBUG_FUNCTION_LINE("%s is not a valid .wuhb file", dirList.GetFilepath(i));
+                DEBUG_FUNCTION_LINE("%s is not a valid .wuhb file: %d", dirList.GetFilepath(i), result);
                 continue;
             }
         }
@@ -334,7 +336,7 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
             fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32, (title->titleId & 0xFFFFFFFF), &gLaunchXML);
 
             std::string bundleFilePath = std::string("/vol/external01/") + gFileInfos[id].path;
-    
+
             bool iconCached = false;
 
             if (RL_MountBundle("iconread", bundleFilePath.c_str(), BundleSource_FileDescriptor_CafeOS) == 0) {
@@ -578,8 +580,8 @@ DECL_FUNCTION(uint32_t, GetTitleVersionInfo__Q2_2nn4vctlFPQ3_2nn4vctl16TitleVers
     if (result < 0) {
         // Fake result if it's H&S
         uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
-        uint32_t expected_u3 = (uint32_t) (titleID >> 32);
-        uint32_t expected_u4 = (uint32_t) (0x00000000FFFFFFFF & titleID);
+        auto expected_u3 = (uint32_t) (titleID >> 32);
+        auto expected_u4 = (uint32_t) (0x00000000FFFFFFFF & titleID);
 
         if (expected_u3 == u3 && expected_u4 == u4) {
             if (titleVersionInfo != nullptr) {
@@ -598,8 +600,8 @@ DECL_FUNCTION(uint32_t, GetUpdateInfo__Q2_2nn4vctlFPQ3_2nn4vctl10UpdateInfoULQ3_
     uint32_t result = real_GetUpdateInfo__Q2_2nn4vctlFPQ3_2nn4vctl10UpdateInfoULQ3_2nn4Cafe9MediaType(u1, u2, u3, u4, u5, u6);
 
     uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
-    uint32_t expected_u3 = (uint32_t) (titleID >> 32);
-    uint32_t expected_u4 = (uint32_t) (0x00000000FFFFFFFF & titleID);
+    auto expected_u3 = (uint32_t) (titleID >> 32);
+    auto expected_u4 = (uint32_t) (0x00000000FFFFFFFF & titleID);
 
     if (expected_u3 == u3 && expected_u4 == u4) {
         DEBUG_FUNCTION_LINE("Fake result to 0xa121f480");
@@ -647,5 +649,7 @@ WUPS_MUST_REPLACE(ACPGetLaunchMetaData, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetLaunch
 WUPS_MUST_REPLACE(FSReadFile, WUPS_LOADER_LIBRARY_COREINIT, FSReadFile);
 WUPS_MUST_REPLACE(FSOpenFile, WUPS_LOADER_LIBRARY_COREINIT, FSOpenFile);
 WUPS_MUST_REPLACE(FSCloseFile, WUPS_LOADER_LIBRARY_COREINIT, FSCloseFile);
+
+WUPS_MUST_REPLACE(GX2SwapScanBuffers, WUPS_LOADER_LIBRARY_GX2, GX2SwapScanBuffers);
 
 WUPS_MUST_REPLACE_PHYSICAL(MCPGetTitleInternal, (0x3001C400 + 0x0205a590), (0x0205a590 - 0xFE3C00));
