@@ -34,7 +34,6 @@ WUPS_PLUGIN_LICENSE("GPL");
 
 #define TITLE_ID_HOMEBREW_MASK (((uint64_t) UPPER_TITLE_ID_HOMEBREW) << 32)
 
-char gIconCache[65580] __attribute__((section(".data")));
 ACPMetaXml gLaunchXML __attribute__((section(".data")));
 MCPTitleListType current_launched_title_info __attribute__((section(".data")));
 BOOL gHomebrewLaunched __attribute__((section(".data")));
@@ -55,7 +54,6 @@ INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
     memset((void *) &gLaunchXML, 0, sizeof(gLaunchXML));
     memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
-    memset((void *) &gIconCache, 0, sizeof(gIconCache));
     gHomebrewLaunched = FALSE;
 }
 
@@ -337,40 +335,6 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
 
             std::string bundleFilePath = std::string("/vol/external01/") + gFileInfos[id].path;
 
-            bool iconCached = false;
-
-            if (RL_MountBundle("iconread", bundleFilePath.c_str(), BundleSource_FileDescriptor_CafeOS) == 0) {
-                DEBUG_FUNCTION_LINE("Mounted file");
-                uint32_t file_handle = 0;
-                if (RL_FileOpen("iconread:/meta/iconTex.tga", &file_handle) == 0) {
-                    DEBUG_FUNCTION_LINE("Opened file");
-                    uint32_t offset = 0;
-                    uint32_t toRead = sizeof(gIconCache);
-                    do {
-                        int res = RL_FileRead(file_handle, reinterpret_cast<uint8_t *>(&gIconCache[offset]), toRead);
-                        DEBUG_FUNCTION_LINE("Read returned %d", res);
-                        if (res <= 0) {
-                            break;
-                        }
-                        offset += res;
-                        toRead -= res;
-                    } while (offset < sizeof(gIconCache));
-                    iconCached = true;
-                    RL_FileClose(file_handle);
-                } else {
-                    DEBUG_FUNCTION_LINE("failed to open")
-                }
-                DEBUG_FUNCTION_LINE("closed")
-                RL_UnmountBundle("iconread");
-            } else {
-                DEBUG_FUNCTION_LINE("Failed to mount");
-            }
-
-            if (!iconCached) {
-                DEBUG_FUNCTION_LINE("Use default icon");
-                memcpy(gIconCache, iconTex_tga, iconTex_tga_size);
-            }
-
             gHomebrewLaunched = TRUE;
 
             RL_LoadFromSDOnNextLaunch(gFileInfos[id].path);
@@ -608,8 +572,7 @@ DECL_FUNCTION(uint32_t, GetUpdateInfo__Q2_2nn4vctlFPQ3_2nn4vctl10UpdateInfoULQ3_
         return 0xa121f480;
     }
 
-    return
-            result;
+    return result;
 }
 
 DECL_FUNCTION(uint32_t, MCPGetTitleInternal, uint32_t mcp_handle, void *input, uint32_t type, MCPTitleListType *titles, uint32_t out_cnt) {
