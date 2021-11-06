@@ -12,7 +12,9 @@
 #include "utils/StringTools.h"
 #include <fs/DirList.h>
 #include "fileinfos.h"
+#include <whb/log_module.h>
 #include <whb/log_udp.h>
+#include <whb/log_cafe.h>
 #include <rpxloader.h>
 #include "fs/FSUtils.h"
 #include "filelist.h"
@@ -58,7 +60,10 @@ INITIALIZE_PLUGIN() {
 }
 
 ON_APPLICATION_START() {
-    WHBLogUdpInit();
+    if(!WHBLogModuleInit()){
+        WHBLogCafeInit();
+        WHBLogUdpInit();
+    }
 
     if (OSGetTitleID() == 0x0005001010040000L || // Wii U Menu JPN
         OSGetTitleID() == 0x0005001010040100L || // Wii U Menu USA
