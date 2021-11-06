@@ -283,7 +283,6 @@ void readCustomTitlesFromSD() {
                     foundSplashScreens = false;
                 }
                 if (foundSplashScreens) {
-                    DEBUG_FUNCTION_LINE("Show splash screens");
                     // Show splash screens
                     cur_title_info->appType = MCP_APP_TYPE_GAME;
                 }
@@ -301,8 +300,6 @@ void readCustomTitlesFromSD() {
         cur_title_info->osVersion = OSGetOSID();
         cur_title_info->sdkVersion = __OSGetProcessSDKVersion();
         cur_title_info->unk0x60 = 0;
-
-        DEBUG_FUNCTION_LINE("[%d] %s [%016llX]", j, gFileInfos[j].path, cur_title_info->titleId);
 
         j++;
     }
@@ -392,7 +389,6 @@ DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFile
     } else if ((handle & 0xFF000000) == 0xFF000000) {
         int32_t fd = (handle & 0x00000FFF);
         int32_t romid = (handle & 0x00FFF000) >> 12;
-        DEBUG_FUNCTION_LINE("Close %d %d", fd, romid);
         uint32_t rl_handle = gFileHandleWrapper[fd].handle;
         RL_FileClose(rl_handle);
         if (gFileInfos[romid].openedFiles--) {
@@ -414,15 +410,12 @@ DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t
             cpySize = iconTex_tga_size;
         }
         memcpy(buffer, iconTex_tga, cpySize);
-        DEBUG_FUNCTION_LINE("DUMMY");
         return (FSStatus) (cpySize / size);
     } else if ((handle & 0xFF000000) == 0xFF000000) {
         int32_t fd = (handle & 0x00000FFF);
         int32_t romid = (handle & 0x00FFF000) >> 12;
 
         uint32_t rl_handle = gFileHandleWrapper[fd].handle;
-
-        DEBUG_FUNCTION_LINE("READ %d from %d (%08X) rom: %d", size * count, fd, rl_handle, romid);
 
         int readSize = RL_FileRead(rl_handle, buffer, (size * count));
 
@@ -568,7 +561,6 @@ DECL_FUNCTION(uint32_t, GetUpdateInfo__Q2_2nn4vctlFPQ3_2nn4vctl10UpdateInfoULQ3_
     auto expected_u4 = (uint32_t) (0x00000000FFFFFFFF & titleID);
 
     if (expected_u3 == u3 && expected_u4 == u4) {
-        DEBUG_FUNCTION_LINE("Fake result to 0xa121f480");
         return 0xa121f480;
     }
 
