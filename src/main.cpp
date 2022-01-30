@@ -12,9 +12,6 @@
 #include "utils/StringTools.h"
 #include <fs/DirList.h>
 #include "fileinfos.h"
-#include <whb/log_module.h>
-#include <whb/log_udp.h>
-#include <whb/log_cafe.h>
 #include <rpxloader.h>
 #include "fs/FSUtils.h"
 #include "filelist.h"
@@ -60,10 +57,7 @@ INITIALIZE_PLUGIN() {
 }
 
 ON_APPLICATION_START() {
-    if(!WHBLogModuleInit()){
-        WHBLogCafeInit();
-        WHBLogUdpInit();
-    }
+    initLogging();
 
     if (OSGetTitleID() == 0x0005001010040000L || // Wii U Menu JPN
         OSGetTitleID() == 0x0005001010040100L || // Wii U Menu USA
@@ -78,50 +72,8 @@ ON_APPLICATION_START() {
     doReboot = false;
 }
 
-DECL_FUNCTION(void, GX2SwapScanBuffers, void) {
-    real_GX2SwapScanBuffers();
-     if (OSGetTitleID() != 0x0005001010040000L && // Wii U Menu JPN
-        OSGetTitleID() != 0x0005001010040100L && // Wii U Menu USA
-        OSGetTitleID() != 0x0005001010040200L) { // Wii U Menu ERU
-        return;
-    }
-    if (doReboot) {
-        return;
-    }
-    if (++sd_check_cooldown < 120) {
-        return;
-    }
-    sd_check_cooldown = 0;
-
-    DIR *dir;
-
-    dir = opendir("fs:/vol/external01/");
-    if (dir == nullptr) {
-        if (!lastResult) {
-            FSCmdBlock cmd;
-            FSMountSource mountSource;
-            FSStatus result;
-
-            FSInitCmdBlock(&cmd);
-            result = FSGetMountSource(__wut_devoptab_fs_client, &cmd, FS_MOUNT_SOURCE_SD, &mountSource, FS_ERROR_FLAG_ALL);
-            if (result >= 0) {
-                DEBUG_FUNCTION_LINE("SD mount successful");
-                _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), 0);
-                doReboot = true;
-            }
-            return;
-        } else {
-            lastResult = false;
-            DEBUG_FUNCTION_LINE("SD was ejected");
-            _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), 0);
-            doReboot = true;
-            return;
-        }
-    }
-    // DEBUG_FUNCTION_LINE("SD is mounted");
-
-    closedir(dir);
-    lastResult = true;
+ON_APPLICATION_ENDS() {
+    deinitLogging();
 }
 
 void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *out_buf) {
@@ -274,7 +226,7 @@ void readCustomTitlesFromSD() {
                     } while (offset < sizeof(ini_buffer));
 
                     if (ini_parse_string(ini_buffer, handler, &gFileInfos[j]) < 0) {
-                        DEBUG_FUNCTION_LINE("Failed to parse ini")
+                        DEBUG_FUNCTION_LINE("Failed to parse ini");
                     }
 
                     RL_FileClose(file_handle);
@@ -609,7 +561,5 @@ WUPS_MUST_REPLACE(ACPGetLaunchMetaData, WUPS_LOADER_LIBRARY_NN_ACP, ACPGetLaunch
 WUPS_MUST_REPLACE(FSReadFile, WUPS_LOADER_LIBRARY_COREINIT, FSReadFile);
 WUPS_MUST_REPLACE(FSOpenFile, WUPS_LOADER_LIBRARY_COREINIT, FSOpenFile);
 WUPS_MUST_REPLACE(FSCloseFile, WUPS_LOADER_LIBRARY_COREINIT, FSCloseFile);
-
-WUPS_MUST_REPLACE(GX2SwapScanBuffers, WUPS_LOADER_LIBRARY_GX2, GX2SwapScanBuffers);
 
 WUPS_MUST_REPLACE_PHYSICAL(MCPGetTitleInternal, (0x3001C400 + 0x0205a590), (0x0205a590 - 0xFE3C00));
