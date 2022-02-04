@@ -1,22 +1,22 @@
-#include <wups.h>
-#include <cstring>
-#include <coreinit/debug.h>
-#include <coreinit/title.h>
-#include <coreinit/cache.h>
-#include <coreinit/systeminfo.h>
-#include <coreinit/mcp.h>
-#include <coreinit/filesystem.h>
-#include <sysapp/title.h>
-#include <nn/acp.h>
-#include <utils/logger.h>
-#include "utils/StringTools.h"
-#include <fs/DirList.h>
-#include "fileinfos.h"
-#include <rpxloader.h>
-#include "fs/FSUtils.h"
-#include "filelist.h"
-#include "utils/ini.h"
 #include "FileWrapper.h"
+#include "fileinfos.h"
+#include "filelist.h"
+#include "fs/FSUtils.h"
+#include "utils/StringTools.h"
+#include "utils/ini.h"
+#include <coreinit/cache.h>
+#include <coreinit/debug.h>
+#include <coreinit/filesystem.h>
+#include <coreinit/mcp.h>
+#include <coreinit/systeminfo.h>
+#include <coreinit/title.h>
+#include <cstring>
+#include <fs/DirList.h>
+#include <nn/acp.h>
+#include <rpxloader.h>
+#include <sysapp/title.h>
+#include <utils/logger.h>
+#include <wups.h>
 
 typedef struct ACPMetaData {
     char bootmovie[80696];
@@ -31,14 +31,14 @@ WUPS_PLUGIN_LICENSE("GPL");
 
 #define UPPER_TITLE_ID_HOMEBREW 0x0005000F
 
-#define TITLE_ID_HOMEBREW_MASK (((uint64_t) UPPER_TITLE_ID_HOMEBREW) << 32)
+#define TITLE_ID_HOMEBREW_MASK  (((uint64_t) UPPER_TITLE_ID_HOMEBREW) << 32)
 
 ACPMetaXml gLaunchXML __attribute__((section(".data")));
 MCPTitleListType current_launched_title_info __attribute__((section(".data")));
 BOOL gHomebrewLaunched __attribute__((section(".data")));
 bool doReboot = false;
 
-bool lastResult = false;
+bool lastResult            = false;
 uint32_t sd_check_cooldown = 0;
 
 extern FSClient *__wut_devoptab_fs_client;
@@ -89,21 +89,21 @@ void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXm
     strncpy(out_buf->longname_en, gFileInfos[id].longname, 64);
     strncpy(out_buf->shortname_en, gFileInfos[id].shortname, 64);
     strncpy(out_buf->publisher_en, gFileInfos[id].author, 64);
-    out_buf->e_manual = 1;
-    out_buf->e_manual_version = 0;
-    out_buf->title_version = 1;
-    out_buf->network_use = 1;
-    out_buf->launching_flag = 4;
+    out_buf->e_manual           = 1;
+    out_buf->e_manual_version   = 0;
+    out_buf->title_version      = 1;
+    out_buf->network_use        = 1;
+    out_buf->launching_flag     = 4;
     out_buf->online_account_use = 1;
-    out_buf->os_version = 0x000500101000400A;
-    out_buf->region = 0xFFFFFFFF;
-    out_buf->common_save_size = 0x0000000001790000;
-    out_buf->group_id = 0x400;
-    out_buf->drc_use = 1;
-    out_buf->version = 1;
-    out_buf->reserved_flag0 = 0x00010001;
-    out_buf->reserved_flag6 = 0x00000003;
-    out_buf->pc_usk = 128;
+    out_buf->os_version         = 0x000500101000400A;
+    out_buf->region             = 0xFFFFFFFF;
+    out_buf->common_save_size   = 0x0000000001790000;
+    out_buf->group_id           = 0x400;
+    out_buf->drc_use            = 1;
+    out_buf->version            = 1;
+    out_buf->reserved_flag0     = 0x00010001;
+    out_buf->reserved_flag6     = 0x00000003;
+    out_buf->pc_usk             = 128;
     strncpy(out_buf->product_code, "WUP-P-HBLD", strlen("WUP-P-HBLD") + 1);
     strncpy(out_buf->content_platform, "WUP", strlen("WUP") + 1);
     strncpy(out_buf->company_code, "0001", strlen("0001") + 1);
@@ -134,7 +134,7 @@ static int handler(void *user, const char *section, const char *name,
     } else if (MATCH("menu", "author")) {
         strncpy(fInfo->author, value, 64 - 1);
     } else {
-        return 0;  /* unknown section/name, error */
+        return 0; /* unknown section/name, error */
     }
 
     return 1;
@@ -175,8 +175,8 @@ void readCustomTitlesFromSD() {
             continue;
         }
 
-        char *repl = (char *) "fs:/vol/external01/";
-        char *with = (char *) "";
+        char *repl  = (char *) "fs:/vol/external01/";
+        char *with  = (char *) "";
         char *input = (char *) dirList.GetFilepath(i);
 
         char *path = StringTools::str_replace(input, repl, with);
@@ -250,20 +250,20 @@ void readCustomTitlesFromSD() {
             }
         }
 
-        cur_title_info->titleId = TITLE_ID_HOMEBREW_MASK | gFileInfos[j].lowerTitleID;
+        cur_title_info->titleId      = TITLE_ID_HOMEBREW_MASK | gFileInfos[j].lowerTitleID;
         cur_title_info->titleVersion = 1;
-        cur_title_info->groupId = 0x400;
+        cur_title_info->groupId      = 0x400;
 
-        cur_title_info->osVersion = OSGetOSID();
+        cur_title_info->osVersion  = OSGetOSID();
         cur_title_info->sdkVersion = __OSGetProcessSDKVersion();
-        cur_title_info->unk0x60 = 0;
+        cur_title_info->unk0x60    = 0;
 
         j++;
     }
 }
 
 DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, MCPTitleListType *titleList, uint32_t size) {
-    int32_t result = real_MCP_TitleList(handle, outTitleCount, titleList, size);
+    int32_t result      = real_MCP_TitleList(handle, outTitleCount, titleList, size);
     uint32_t titlecount = *outTitleCount;
 
     for (auto &gFileInfo : gFileInfos) {
@@ -300,14 +300,13 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
 
     int result = real_ACPCheckTitleLaunchByTitleListTypeEx(title, u2);
     return result;
-
 }
 
 DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, const char *mode, int *handle, int error) {
-    const char *start = "/vol/storage_mlc01/sys/title/0005000F";
-    const char *icon = ".tga";
+    const char *start   = "/vol/storage_mlc01/sys/title/0005000F";
+    const char *icon    = ".tga";
     const char *iconTex = "iconTex.tga";
-    const char *sound = ".btsnd";
+    const char *sound   = ".btsnd";
 
     if (StringTools::EndsWith(path, icon) || StringTools::EndsWith(path, sound)) {
         if (strncmp(path, start, strlen(start)) == 0) {
@@ -316,12 +315,12 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
             if (StringTools::EndsWith(path, iconTex)) {
                 // fallback to dummy icon if loaded homebrew is no .wbf
                 *handle = 0x13371338;
-                res = FS_STATUS_OK;
+                res     = FS_STATUS_OK;
             }
 
             uint32_t lowerTitleID;
-            char *id = path + 1 + strlen(start);
-            id[8] = 0;
+            char *id     = path + 1 + strlen(start);
+            id[8]        = 0;
             char *ending = id + 9;
             sscanf(id, "%08X", &lowerTitleID);
             int32_t idVal = getIDByLowerTitleID(lowerTitleID);
@@ -344,8 +343,8 @@ DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFile
     if (handle == 0x13371338) {
         return FS_STATUS_OK;
     } else if ((handle & 0xFF000000) == 0xFF000000) {
-        int32_t fd = (handle & 0x00000FFF);
-        int32_t romid = (handle & 0x00FFF000) >> 12;
+        int32_t fd         = (handle & 0x00000FFF);
+        int32_t romid      = (handle & 0x00FFF000) >> 12;
         uint32_t rl_handle = gFileHandleWrapper[fd].handle;
         RL_FileClose(rl_handle);
         if (gFileInfos[romid].openedFiles--) {
@@ -369,7 +368,7 @@ DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t
         memcpy(buffer, iconTex_tga, cpySize);
         return (FSStatus) (cpySize / size);
     } else if ((handle & 0xFF000000) == 0xFF000000) {
-        int32_t fd = (handle & 0x00000FFF);
+        int32_t fd    = (handle & 0x00000FFF);
         int32_t romid = (handle & 0x00FFF000) >> 12;
 
         uint32_t rl_handle = gFileHandleWrapper[fd].handle;
@@ -426,8 +425,8 @@ DECL_FUNCTION(int32_t, ACPGetLaunchMetaXml, ACPMetaXml *metaxml) {
 DECL_FUNCTION(uint32_t, ACPGetApplicationBox, uint32_t *u1, uint32_t *u2, uint32_t u3, uint32_t u4) {
     if (u3 == UPPER_TITLE_ID_HOMEBREW) {
         uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
-        u3 = (uint32_t) (titleID >> 32);
-        u4 = (uint32_t) (0x00000000FFFFFFFF & titleID);
+        u3               = (uint32_t) (titleID >> 32);
+        u4               = (uint32_t) (0x00000000FFFFFFFF & titleID);
     }
     uint32_t result = real_ACPGetApplicationBox(u1, u2, u3, u4);
     return result;
@@ -439,8 +438,8 @@ DECL_FUNCTION(uint32_t, ACPGetApplicationBox, uint32_t *u1, uint32_t *u2, uint32
 DECL_FUNCTION(uint32_t, PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg, uint32_t *param) {
     if (param[2] == UPPER_TITLE_ID_HOMEBREW) {
         uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
-        param[2] = (uint32_t) (titleID >> 32);
-        param[3] = (uint32_t) (0x00000000FFFFFFFF & titleID);
+        param[2]         = (uint32_t) (titleID >> 32);
+        param[3]         = (uint32_t) (0x00000000FFFFFFFF & titleID);
     }
     uint32_t result = real_PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg(param);
     return result;
@@ -452,8 +451,8 @@ DECL_FUNCTION(uint32_t, PatchChkStart__3RplFRCQ3_2nn6drmapp8StartArg, uint32_t *
 DECL_FUNCTION(uint32_t, MCP_RightCheckLaunchable, uint32_t *u1, uint32_t *u2, uint32_t u3, uint32_t u4, uint32_t u5) {
     if (u3 == UPPER_TITLE_ID_HOMEBREW) {
         uint64_t titleID = _SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY);
-        u3 = (uint32_t) (titleID >> 32);
-        u4 = (uint32_t) (0x00000000FFFFFFFF & titleID);
+        u3               = (uint32_t) (titleID >> 32);
+        u4               = (uint32_t) (0x00000000FFFFFFFF & titleID);
     }
     uint32_t result = real_MCP_RightCheckLaunchable(u1, u2, u3, u4, u5);
     return result;
@@ -500,8 +499,8 @@ DECL_FUNCTION(uint32_t, GetTitleVersionInfo__Q2_2nn4vctlFPQ3_2nn4vctl16TitleVers
         if (expected_u3 == u3 && expected_u4 == u4) {
             if (titleVersionInfo != nullptr) {
                 titleVersionInfo->currentVersion = 129;
-                titleVersionInfo->neededVersion = 129;
-                titleVersionInfo->needsUpdate = 0;
+                titleVersionInfo->neededVersion  = 129;
+                titleVersionInfo->needsUpdate    = 0;
             }
             return 0;
         }
