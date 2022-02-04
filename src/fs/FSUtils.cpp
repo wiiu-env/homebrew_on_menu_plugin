@@ -1,11 +1,11 @@
-#include <malloc.h>
-#include <string.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include "fs/FSUtils.h"
 #include "fs/CFile.hpp"
 #include "utils/logger.h"
+#include <fcntl.h>
+#include <malloc.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
 int32_t FSUtils::LoadFileToMem(const char *filepath, uint8_t **inbuffer, uint32_t *size) {
     //! always initialze input
@@ -27,8 +27,8 @@ int32_t FSUtils::LoadFileToMem(const char *filepath, uint8_t **inbuffer, uint32_
     }
 
     uint32_t blocksize = 0x100000;
-    uint32_t done = 0;
-    int32_t readBytes = 0;
+    uint32_t done      = 0;
+    int32_t readBytes  = 0;
 
     while (done < filesize) {
         if (done + blocksize > filesize) {
@@ -62,7 +62,7 @@ int32_t FSUtils::CheckFile(const char *filepath) {
     if (!filepath)
         return 0;
 
-    struct stat filestat{};
+    struct stat filestat {};
 
     char dirnoslash[strlen(filepath) + 2];
     snprintf(dirnoslash, sizeof(dirnoslash), "%s", filepath);
@@ -139,4 +139,3 @@ int32_t FSUtils::saveBufferToFile(const char *path, void *buffer, uint32_t size)
     file.close();
     return written;
 }
-

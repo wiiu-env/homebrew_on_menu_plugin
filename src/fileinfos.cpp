@@ -1,8 +1,8 @@
-#include <cstring>
-#include <stdio.h>
-#include <rpxloader.h>
-#include "utils/logger.h"
 #include "fileinfos.h"
+#include "utils/logger.h"
+#include <cstring>
+#include <rpxloader.h>
+#include <stdio.h>
 
 FileInfos gFileInfos[FILE_INFO_SIZE] __attribute__((section(".data")));
 
@@ -46,7 +46,7 @@ bool mountRomfs(uint32_t id) {
         char romName[10];
         snprintf(romName, 10, "%08X", id);
         DEBUG_FUNCTION_LINE("Mount %s as %s", buffer, romName);
-        int32_t  res = 0;
+        int32_t res = 0;
         if ((res = RL_MountBundle(romName, buffer, BundleSource_FileDescriptor_CafeOS)) == 0) {
             DEBUG_FUNCTION_LINE("Mounted successfully ");
             gFileInfos[id].romfsMounted = true;

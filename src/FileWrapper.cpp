@@ -1,11 +1,11 @@
 #include "FileWrapper.h"
-#include <cstdlib>
 #include "fileinfos.h"
-#include <cstring>
-#include <cstdio>
-#include <rpxloader.h>
 #include "utils/logger.h"
 #include <coreinit/cache.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <rpxloader.h>
 
 FileHandleWrapper gFileHandleWrapper[FILE_WRAPPER_SIZE] __attribute__((section(".data")));
 
@@ -28,8 +28,8 @@ int OpenFileForID(int id, const char *filepath, int *handle) {
     snprintf(romName, 10, "%08X", id);
 
     char *dyn_path = (char *) malloc(strlen(filepath) + 1);
-    char last = 0;
-    int j = 0;
+    char last      = 0;
+    int j          = 0;
     for (int i = 0; filepath[i] != 0; i++) {
         if (filepath[i] == '/') {
             if (filepath[i] != last) {
@@ -56,7 +56,7 @@ int OpenFileForID(int id, const char *filepath, int *handle) {
             return -2;
         }
         gFileHandleWrapper[handle_wrapper_slot].handle = out_handle;
-        *handle = 0xFF000000 | (id << 12) | (handle_wrapper_slot & 0x00000FFF);
+        *handle                                        = 0xFF000000 | (id << 12) | (handle_wrapper_slot & 0x00000FFF);
         gFileInfos[id].openedFiles++;
         return 0;
     } else {

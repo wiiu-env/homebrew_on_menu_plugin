@@ -1,8 +1,8 @@
-#include <string.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <whb/log.h>
 #include "utils/logger.h"
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+#include <whb/log.h>
 
 // https://gist.github.com/ccbrown/9722406
 void dumpHex(const void *data, size_t size) {

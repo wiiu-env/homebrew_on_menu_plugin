@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstdint>
 #include <coreinit/mcp.h>
+#include <cstdint>
 
 typedef struct WUT_PACKED FileInfos_ {
     char path[256];
@@ -16,7 +16,7 @@ typedef struct WUT_PACKED FileInfos_ {
     MCPTitleListType titleInfo;
 } FileInfos;
 
-#define FILE_INFO_SIZE          300
+#define FILE_INFO_SIZE 300
 extern FileInfos gFileInfos[FILE_INFO_SIZE];
 
 int32_t getIDByLowerTitleID(uint32_t lowerTitleID);
