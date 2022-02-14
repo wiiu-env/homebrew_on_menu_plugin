@@ -13,6 +13,7 @@
 #include <coreinit/title.h>
 #include <cstring>
 #include <fs/DirList.h>
+#include <malloc.h>
 #include <nn/acp.h>
 #include <rpxloader.h>
 #include <sysapp/title.h>
@@ -211,21 +212,26 @@ void readCustomTitlesFromSD() {
                 uint32_t file_handle = 0;
                 if (RL_FileOpen("romfscheck:/meta/meta.ini", &file_handle) == 0) {
                     // this buffer should be big enough for our .ini
-                    char ini_buffer[0x1000];
-                    memset(ini_buffer, 0, sizeof(ini_buffer));
-                    uint32_t offset = 0;
-                    uint32_t toRead = sizeof(ini_buffer);
-                    do {
-                        int res = RL_FileRead(file_handle, reinterpret_cast<uint8_t *>(&ini_buffer[offset]), toRead);
-                        if (res <= 0) {
-                            break;
-                        }
-                        offset += res;
-                        toRead -= res;
-                    } while (offset < sizeof(ini_buffer));
+                    char *ini_buffer = (char *) memalign(0x40, 0x1000);
+                    if (ini_buffer) {
+                        memset(ini_buffer, 0, 0x1000);
+                        uint32_t offset = 0;
+                        uint32_t toRead = 0x1000;
+                        do {
+                            int res = RL_FileRead(file_handle, reinterpret_cast<uint8_t *>(&ini_buffer[offset]), toRead);
+                            if (res <= 0) {
+                                break;
+                            }
+                            offset += res;
+                            toRead -= res;
+                        } while (offset < sizeof(ini_buffer));
 
-                    if (ini_parse_string(ini_buffer, handler, &gFileInfos[j]) < 0) {
-                        DEBUG_FUNCTION_LINE("Failed to parse ini");
+                        if (ini_parse_string(ini_buffer, handler, &gFileInfos[j]) < 0) {
+                            DEBUG_FUNCTION_LINE("Failed to parse ini");
+                        }
+                        free(ini_buffer);
+                    } else {
+                        DEBUG_FUNCTION_LINE("Failed to alloc memory");
                     }
 
                     RL_FileClose(file_handle);
