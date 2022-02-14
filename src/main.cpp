@@ -8,6 +8,7 @@
 #include <coreinit/debug.h>
 #include <coreinit/filesystem.h>
 #include <coreinit/mcp.h>
+#include <coreinit/mutex.h>
 #include <coreinit/systeminfo.h>
 #include <coreinit/title.h>
 #include <cstring>
@@ -49,11 +50,16 @@ extern "C" void _SYSLaunchTitleWithStdArgsInNoSplash(uint64_t, uint32_t);
 
 WUPS_USE_WUT_DEVOPTAB();
 
+OSMutex fileWrapperMutex;
+OSMutex fileinfoMutex;
+
 INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
     memset((void *) &gLaunchXML, 0, sizeof(gLaunchXML));
     memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
     gHomebrewLaunched = FALSE;
+    OSInitMutex(&fileWrapperMutex);
+    OSInitMutex(&fileinfoMutex);
 }
 
 ON_APPLICATION_START() {
@@ -266,6 +272,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
     int32_t result      = real_MCP_TitleList(handle, outTitleCount, titleList, size);
     uint32_t titlecount = *outTitleCount;
 
+    OSLockMutex(&fileinfoMutex);
     for (auto &gFileInfo : gFileInfos) {
         if (gFileInfo.lowerTitleID == 0) {
             break;
@@ -273,6 +280,7 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
         memcpy(&(titleList[titlecount]), &(gFileInfo.titleInfo), sizeof(gFileInfo.titleInfo));
         titlecount++;
     }
+    OSUnlockMutex(&fileinfoMutex);
 
     *outTitleCount = titlecount;
 
@@ -343,8 +351,9 @@ DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFile
     if (handle == 0x13371338) {
         return FS_STATUS_OK;
     } else if ((handle & 0xFF000000) == 0xFF000000) {
-        int32_t fd         = (handle & 0x00000FFF);
-        int32_t romid      = (handle & 0x00FFF000) >> 12;
+        int32_t fd    = (handle & 0x00000FFF);
+        int32_t romid = (handle & 0x00FFF000) >> 12;
+        OSLockMutex(&fileinfoMutex);
         uint32_t rl_handle = gFileHandleWrapper[fd].handle;
         RL_FileClose(rl_handle);
         if (gFileInfos[romid].openedFiles--) {
@@ -354,6 +363,7 @@ DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFile
                 unmountRomfs(romid);
             }
         }
+        OSUnlockMutex(&fileinfoMutex);
         return FS_STATUS_OK;
     }
     return real_FSCloseFile(client, block, handle, flags);
