@@ -326,12 +326,12 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
             char *ending = id + 9;
             sscanf(id, "%08X", &lowerTitleID);
             int32_t idVal = getIDByLowerTitleID(lowerTitleID);
-            if (idVal < 0) {
-                DEBUG_FUNCTION_LINE("Failed to find id for titleID %08X", lowerTitleID);
-            } else {
-                if (OpenFileForID(idVal, ending, handle) < 0) {
+            if (idVal >= 0) {
+                if (StringTools::EndsWith(gFileInfos[idVal].filename, ".wuhb") && OpenFileForID(idVal, ending, handle) < 0) {
                     return res;
                 }
+            } else {
+                DEBUG_FUNCTION_LINE("Failed to find id for titleID %08X", lowerTitleID);
             }
             return FS_STATUS_OK;
         }
