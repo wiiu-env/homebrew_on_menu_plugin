@@ -10,3 +10,4 @@ typedef struct FileHandleWrapper_t {
 extern FileHandleWrapper gFileHandleWrapper[FILE_WRAPPER_SIZE];
 
 int OpenFileForID(int id, const char *path, int32_t *handle);
+bool FileHandleWrapper_FreeAll();

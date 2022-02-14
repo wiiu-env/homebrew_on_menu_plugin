@@ -26,6 +26,27 @@ int FileHandleWrapper_GetSlot() {
     return res;
 }
 
+bool FileHandleWrapper_FreeSlot(uint32_t slot) {
+    if (slot >= FILE_WRAPPER_SIZE) {
+        return false;
+    }
+    OSLockMutex(&fileWrapperMutex);
+    gFileHandleWrapper[slot].handle = 0;
+    gFileHandleWrapper[slot].inUse  = false;
+    OSMemoryBarrier();
+    OSUnlockMutex(&fileWrapperMutex);
+    return -1;
+}
+
+bool FileHandleWrapper_FreeAll() {
+    OSLockMutex(&fileWrapperMutex);
+    for (int i = 0; i < FILE_WRAPPER_SIZE; i++) {
+        FileHandleWrapper_FreeSlot(i);
+    }
+    OSUnlockMutex(&fileWrapperMutex);
+    return -1;
+}
+
 int OpenFileForID(int id, const char *filepath, int *handle) {
     if (!mountRomfs(id)) {
         return -1;
