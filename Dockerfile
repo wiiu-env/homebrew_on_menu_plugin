@@ -1,6 +1,6 @@
-FROM wiiuenv/devkitppc:20211229
+FROM wiiuenv/devkitppc:20220213
 
 COPY --from=wiiuenv/wiiupluginsystem:20220123 /artifacts $DEVKITPRO
-COPY --from=wiiuenv/librpxloader:20211002 /artifacts $DEVKITPRO
+COPY --from=wiiuenv/librpxloader:20220212 /artifacts $DEVKITPRO
 
 WORKDIR project
