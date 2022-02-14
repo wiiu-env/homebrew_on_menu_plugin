@@ -53,6 +53,7 @@ int OpenFileForID(int id, const char *filepath, int *handle) {
         if (handle_wrapper_slot < 0) {
             DEBUG_FUNCTION_LINE("No free slot");
             RL_FileClose(out_handle);
+            unmountRomfs(id);
             return -2;
         }
         gFileHandleWrapper[handle_wrapper_slot].handle = out_handle;
