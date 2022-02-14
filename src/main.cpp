@@ -52,6 +52,7 @@ INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
     memset((void *) &gLaunchXML, 0, sizeof(gLaunchXML));
     memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
+    memset((void *) &gFileHandleWrapper, 0, sizeof(gFileHandleWrapper));
     gHomebrewLaunched = FALSE;
     OSInitMutex(&fileWrapperMutex);
     OSInitMutex(&fileinfoMutex);
