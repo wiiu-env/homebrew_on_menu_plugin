@@ -2,6 +2,7 @@
 #include "fileinfos.h"
 #include "utils/logger.h"
 #include <coreinit/cache.h>
+#include <coreinit/mutex.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -9,15 +10,20 @@
 
 FileHandleWrapper gFileHandleWrapper[FILE_WRAPPER_SIZE] __attribute__((section(".data")));
 
+extern OSMutex fileWrapperMutex;
+
 int FileHandleWrapper_GetSlot() {
+    OSLockMutex(&fileWrapperMutex);
+    int res = -1;
     for (int i = 0; i < FILE_WRAPPER_SIZE; i++) {
         if (!gFileHandleWrapper[i].inUse) {
             gFileHandleWrapper[i].inUse = true;
-            DCFlushRange(&gFileHandleWrapper[i], sizeof(FileHandleWrapper));
-            return i;
+            res                         = i;
         }
     }
-    return -1;
+    OSMemoryBarrier();
+    OSUnlockMutex(&fileWrapperMutex);
+    return res;
 }
 
 int OpenFileForID(int id, const char *filepath, int *handle) {
