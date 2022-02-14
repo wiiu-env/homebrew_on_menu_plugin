@@ -72,6 +72,7 @@ ON_APPLICATION_START() {
 }
 
 ON_APPLICATION_ENDS() {
+    FileHandleWrapper_FreeAll();
     deinitLogging();
 }
 
