@@ -37,12 +37,6 @@ WUPS_PLUGIN_LICENSE("GPL");
 ACPMetaXml gLaunchXML __attribute__((section(".data")));
 MCPTitleListType current_launched_title_info __attribute__((section(".data")));
 BOOL gHomebrewLaunched __attribute__((section(".data")));
-bool doReboot = false;
-
-bool lastResult            = false;
-uint32_t sd_check_cooldown = 0;
-
-extern FSClient *__wut_devoptab_fs_client;
 
 void readCustomTitlesFromSD();
 
@@ -75,7 +69,6 @@ ON_APPLICATION_START() {
         DEBUG_FUNCTION_LINE("gHomebrewLaunched to FALSE");
         gHomebrewLaunched = FALSE;
     }
-    doReboot = false;
 }
 
 ON_APPLICATION_ENDS() {
