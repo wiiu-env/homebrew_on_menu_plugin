@@ -315,7 +315,7 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
             int res = FS_STATUS_NOT_FOUND;
 
             if (StringTools::EndsWith(path, iconTex)) {
-                // fallback to dummy icon if loaded homebrew is no .wbf
+                // fallback to dummy icon if loaded homebrew is no .wuhb
                 *handle = 0x13371338;
                 res     = FS_STATUS_OK;
             }
