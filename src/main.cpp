@@ -190,18 +190,16 @@ void readCustomTitlesFromSD() {
 
         MCPTitleListType *cur_title_info = &(gFileInfos[j].titleInfo);
 
-        char buffer[25];
-        snprintf(buffer, 25, "/custom/%08X%08X", UPPER_TITLE_ID_HOMEBREW, gFileInfos[j].lowerTitleID);
-        strcpy(cur_title_info->path, buffer);
+        snprintf(cur_title_info->path, sizeof(cur_title_info->path), "/custom/%08X%08X", UPPER_TITLE_ID_HOMEBREW, gFileInfos[j].lowerTitleID);
 
-        strncpy(gFileInfos[j].filename, dirList.GetFilename(i), 255);
-        strncpy(gFileInfos[j].longname, dirList.GetFilename(i), 64);
-        strncpy(gFileInfos[j].shortname, dirList.GetFilename(i), 64);
-        strncpy(gFileInfos[j].author, dirList.GetFilename(i), 64);
+        strncpy(gFileInfos[j].filename, dirList.GetFilename(i), sizeof(gFileInfos[j].filename));
+        strncpy(gFileInfos[j].longname, dirList.GetFilename(i), sizeof(gFileInfos[j].longname));
+        strncpy(gFileInfos[j].shortname, dirList.GetFilename(i), sizeof(gFileInfos[j].shortname));
+        strncpy(gFileInfos[j].author, dirList.GetFilename(i), sizeof(gFileInfos[j].author));
         gFileInfos[j].source = 0; //SD Card;
 
         const char *indexedDevice = "mlc";
-        strcpy(cur_title_info->indexedDevice, indexedDevice);
+        strncpy(cur_title_info->indexedDevice, indexedDevice, sizeof(cur_title_info->indexedDevice));
 
         // System apps don't have a splash screen.
         cur_title_info->appType = MCP_APP_TYPE_SYSTEM_APPS;
