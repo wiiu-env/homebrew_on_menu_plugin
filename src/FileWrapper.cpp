@@ -19,6 +19,7 @@ int FileHandleWrapper_GetSlot() {
         if (!gFileHandleWrapper[i].inUse) {
             gFileHandleWrapper[i].inUse = true;
             res                         = i;
+            break;
         }
     }
     OSMemoryBarrier();
