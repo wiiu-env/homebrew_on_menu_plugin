@@ -1,6 +1,6 @@
-#ifndef __FS_UTILS_H_
-#define __FS_UTILS_H_
+#pragma once
 
+#include <string>
 #include <wut_types.h>
 
 class FSUtils {
@@ -13,6 +13,6 @@ public:
     static int32_t CheckFile(const char *filepath);
 
     static int32_t saveBufferToFile(const char *path, void *buffer, uint32_t size);
-};
 
-#endif // __FS_UTILS_H_
+    static bool copyFile(const std::string &in, const std::string &out);
+};
