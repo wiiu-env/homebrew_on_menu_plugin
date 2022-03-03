@@ -139,3 +139,39 @@ int32_t FSUtils::saveBufferToFile(const char *path, void *buffer, uint32_t size)
     file.close();
     return written;
 }
+
+bool FSUtils::copyFile(const std::string &in, const std::string &out) {
+    // Using C++ buffers is **really** slow. Copying in 1023 byte chunks.
+    // Let's do it the old way.
+    size_t size;
+
+    int source = open(in.c_str(), O_RDONLY, 0);
+    if (source < 0) {
+        DEBUG_FUNCTION_LINE("Failed to open source %s", in.c_str());
+
+        return false;
+    }
+    int dest = open(out.c_str(), 0x602, 0644);
+    if (dest < 0) {
+        DEBUG_FUNCTION_LINE("Failed to open dest %s", out.c_str());
+        close(source);
+        return false;
+    }
+
+    auto bufferSize = 128 * 1024;
+    char *buf       = (char *) malloc(bufferSize);
+    if (buf == nullptr) {
+        DEBUG_FUNCTION_LINE("Failed to alloc buffer");
+        return false;
+    }
+
+    while ((size = read(source, buf, bufferSize)) > 0) {
+        write(dest, buf, size);
+    }
+
+    free(buf);
+
+    close(source);
+    close(dest);
+    return true;
+}
