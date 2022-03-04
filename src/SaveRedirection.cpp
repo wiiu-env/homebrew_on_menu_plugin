@@ -13,7 +13,7 @@
 bool gInWiiUMenu __attribute__((section(".data")));
 
 static FSStatus CallWithNewPath(const char *oldPath, const std::function<FSStatus(const char *)> &callFunctionWithPath) {
-    if (!gInWiiUMenu || strncmp(oldPath, "/vol/save/", 10) != 0) {
+    if (!sSDIsMounted || !gInWiiUMenu || strncmp(oldPath, "/vol/save/", 10) != 0) {
         return callFunctionWithPath(oldPath);
     }
 
