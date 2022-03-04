@@ -1,4 +1,5 @@
 #include "FileWrapper.h"
+#include "SaveRedirection.h"
 #include "fileinfos.h"
 #include "filelist.h"
 #include "fs/FSUtils.h"
@@ -16,6 +17,7 @@
 #include <malloc.h>
 #include <nn/acp.h>
 #include <rpxloader.h>
+#include <sdutils/sdutils.h>
 #include <sysapp/title.h>
 #include <utils/logger.h>
 #include <wups.h>
@@ -58,13 +60,34 @@ INITIALIZE_PLUGIN() {
     OSInitMutex(&fileinfoMutex);
 }
 
+bool sSDUtilsInitDone = false;
+bool sSDIsMounted     = false;
+bool sTitleRebooting  = false;
+
+void SDAttachedHandler(SDUtilsAttachStatus status) {
+    if (!sTitleRebooting) {
+        _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), 0);
+        sTitleRebooting = true;
+    }
+}
+
 ON_APPLICATION_START() {
     initLogging();
 
     if (OSGetTitleID() == 0x0005001010040000L || // Wii U Menu JPN
         OSGetTitleID() == 0x0005001010040100L || // Wii U Menu USA
-        OSGetTitleID() == 0x0005001010040200L) { // Wii U Menu ERU
-        readCustomTitlesFromSD();
+        OSGetTitleID() == 0x0005001010040200L) { // Wii U Menu EUR
+
+        if (SDUtils_Init() >= 0) {
+            sSDUtilsInitDone = true;
+            sTitleRebooting  = false;
+            SDUtils_AddAttachHandler(SDAttachedHandler);
+        }
+        if (SDUtils_IsSdCardMounted(&sSDIsMounted) >= 0 && sSDIsMounted) {
+            readCustomTitlesFromSD();
+        }
+    } else {
+        gInWiiUMenu = false;
     }
 
     if (_SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY) != OSGetTitleID()) {
@@ -75,8 +98,16 @@ ON_APPLICATION_START() {
 
 ON_APPLICATION_ENDS() {
     unmountAllRomfs();
+    memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
     FileHandleWrapper_FreeAll();
     deinitLogging();
+    gInWiiUMenu = false;
+    if (sSDUtilsInitDone) {
+        SDUtils_RemoveAttachHandler(SDAttachedHandler);
+        SDUtils_DeInit();
+        sSDUtilsInitDone = false;
+    }
+    sSDIsMounted = false;
 }
 
 void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *out_buf) {

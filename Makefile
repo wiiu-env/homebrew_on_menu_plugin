@@ -36,7 +36,7 @@ CFLAGS	:=	-Wall -O2 -ffunction-sections \
 
 CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -D__WUPS__ 
 
-CXXFLAGS	:= $(CFLAGS)
+CXXFLAGS	:= $(CFLAGS) -fno-exceptions -fno-rtti
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-g $(ARCH) $(RPXSPECS) -Wl,-Map,$(notdir $*.map) -T$(WUMS_ROOT)/share/librpxloader.ld $(WUPSSPECS)
@@ -46,7 +46,7 @@ CXXFLAGS += -DDEBUG -g
 CFLAGS += -DDEBUG -g
 endif
 
-LIBS	:= -lwups -lwut -lrpxloader
+LIBS	:= -lwups -lwut -lrpxloader -lsdutils
 
 #-------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level
