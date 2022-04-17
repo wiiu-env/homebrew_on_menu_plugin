@@ -5,6 +5,7 @@
 #include "fs/FSUtils.h"
 #include "utils/StringTools.h"
 #include "utils/ini.h"
+#include <content_redirection/redirection.h>
 #include <coreinit/cache.h>
 #include <coreinit/debug.h>
 #include <coreinit/filesystem.h>
@@ -15,11 +16,14 @@
 #include <cstring>
 #include <fs/DirList.h>
 #include <malloc.h>
+#include <mutex>
 #include <nn/acp.h>
-#include <rpxloader.h>
+#include <rpxloader/rpxloader.h>
 #include <sdutils/sdutils.h>
+#include <sysapp/launch.h>
 #include <sysapp/title.h>
 #include <utils/logger.h>
+#include <wuhb_utils/utils.h>
 #include <wups.h>
 
 typedef struct ACPMetaData {
@@ -43,12 +47,7 @@ BOOL gHomebrewLaunched __attribute__((section(".data")));
 
 void readCustomTitlesFromSD();
 
-extern "C" void _SYSLaunchTitleWithStdArgsInNoSplash(uint64_t, uint32_t);
-
 WUPS_USE_WUT_DEVOPTAB();
-
-OSMutex fileWrapperMutex;
-OSMutex fileinfoMutex;
 
 INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
@@ -56,17 +55,36 @@ INITIALIZE_PLUGIN() {
     memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
     memset((void *) &gFileHandleWrapper, 0, sizeof(gFileHandleWrapper));
     gHomebrewLaunched = FALSE;
-    OSInitMutex(&fileWrapperMutex);
-    OSInitMutex(&fileinfoMutex);
+
+    // Use libwuhbutils.
+    WUHBUtilsStatus error;
+    if ((error = WUHBUtils_Init()) != WUHB_UTILS_RESULT_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init WUHBUtils. Error %d", error);
+        OSFatal("Homebrew on Menu Plugin: Failed to init WUHBUtils.");
+    }
+
+    // Use libcontentredirection.
+    ContentRedirectionStatus error2;
+    if ((error2 = ContentRedirection_Init()) != CONTENT_REDIRECTION_RESULT_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init ContentRedirection. Error %d", error2);
+        OSFatal("Homebrew on Menu Plugin: Failed to init ContentRedirection.");
+    }
+
+    // Use librpxloader.
+    RPXLoaderStatus error3;
+    if ((error3 = RPXLoader_Init()) != RPX_LOADER_RESULT_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init RPXLoader. Error %d", error3);
+        OSFatal("Homebrew on Menu Plugin: Failed to init RPXLoader.");
+    }
 }
 
 bool sSDUtilsInitDone = false;
 bool sSDIsMounted     = false;
 bool sTitleRebooting  = false;
 
-void SDAttachedHandler(SDUtilsAttachStatus status) {
+void SDAttachedHandler([[maybe_unused]] SDUtilsAttachStatus status) {
     if (!sTitleRebooting) {
-        _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), 0);
+        _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), nullptr);
         sTitleRebooting = true;
     }
 }
@@ -97,6 +115,7 @@ ON_APPLICATION_START() {
 }
 
 ON_APPLICATION_ENDS() {
+    SaveRedirectionCleanUp();
     unmountAllRomfs();
     memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
     FileHandleWrapper_FreeAll();
@@ -113,7 +132,7 @@ ON_APPLICATION_ENDS() {
 void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *out_buf) {
     int32_t id = getIDByLowerTitleID(titleid_lower);
     if (id < 0) {
-        DEBUG_FUNCTION_LINE("Failed to get id by titleid");
+        DEBUG_FUNCTION_LINE_ERR("Failed to get id by titleid");
         return;
     }
     if (id >= FILE_INFO_SIZE) {
@@ -160,7 +179,6 @@ static int handler(void *user, const char *section, const char *name,
     auto *fInfo = (FileInfos *) user;
 #define MATCH(s, n) strcmp(section, s) == 0 && strcmp(name, n) == 0
 
-    DEBUG_FUNCTION_LINE("%s %s %s", section, name, value);
     if (MATCH("menu", "longname")) {
         strncpy(fInfo->longname, value, 64 - 1);
     } else if (MATCH("menu", "shortname")) {
@@ -174,6 +192,7 @@ static int handler(void *user, const char *section, const char *name,
     return 1;
 }
 
+bool CheckFileExistsHelper(const char *path);
 void readCustomTitlesFromSD() {
     // Reset current infos
     unmountAllRomfs();
@@ -185,7 +204,7 @@ void readCustomTitlesFromSD() {
     int j = 0;
     for (int i = 0; i < dirList.GetFilecount(); i++) {
         if (j >= FILE_INFO_SIZE) {
-            DEBUG_FUNCTION_LINE("TOO MANY TITLES");
+            DEBUG_FUNCTION_LINE_ERR("TOO MANY TITLES");
             break;
         }
 
@@ -209,14 +228,14 @@ void readCustomTitlesFromSD() {
             continue;
         }
 
-        char *repl  = (char *) "fs:/vol/external01/";
-        char *with  = (char *) "";
-        char *input = (char *) dirList.GetFilepath(i);
+        auto repl  = "fs:/vol/external01/";
+        auto input = dirList.GetFilepath(i);
 
-        char *path = StringTools::str_replace(input, repl, with);
-        if (path != nullptr) {
-            strncpy(gFileInfos[j].path, path, 255);
-            free(path);
+        if (std::string_view(input).starts_with(repl)) {
+            strncpy(gFileInfos[j].path, &input[strlen(repl)], sizeof(gFileInfos[j].path));
+        } else {
+            DEBUG_FUNCTION_LINE_ERR("Skip %s, Path doesn't start with %s (This should never happen", input, repl);
+            continue;
         }
 
         gFileInfos[j].lowerTitleID = hash(gFileInfos[j].path);
@@ -237,52 +256,45 @@ void readCustomTitlesFromSD() {
         // System apps don't have a splash screen.
         cur_title_info->appType = MCP_APP_TYPE_SYSTEM_APPS;
 
-        // Check if the have bootTvTex and bootDrcTex that could be shown.
-        if (StringTools::EndsWith(gFileInfos[j].filename, ".wuhb")) {
+        // Check if the bootTvTex and bootDrcTex exists
+        if (std::string_view(gFileInfos[j].filename).ends_with(".wuhb")) {
             int result = 0;
-            if ((result = RL_MountBundle("romfscheck", dirList.GetFilepath(i), BundleSource_FileDescriptor)) == 0) {
-                uint32_t file_handle = 0;
-                if (RL_FileOpen("romfscheck:/meta/meta.ini", &file_handle) == 0) {
-                    // this buffer should be big enough for our .ini
-                    char *ini_buffer = (char *) memalign(0x40, 0x1000);
-                    if (ini_buffer) {
-                        memset(ini_buffer, 0, 0x1000);
-                        uint32_t offset = 0;
-                        uint32_t toRead = 0x1000;
-                        do {
-                            int res = RL_FileRead(file_handle, reinterpret_cast<uint8_t *>(&ini_buffer[offset]), toRead);
-                            if (res <= 0) {
-                                break;
-                            }
-                            offset += res;
-                            toRead -= res;
-                        } while (offset < sizeof(ini_buffer));
 
-                        if (ini_parse_string(ini_buffer, handler, &gFileInfos[j]) < 0) {
-                            DEBUG_FUNCTION_LINE("Failed to parse ini");
-                        }
-                        free(ini_buffer);
-                    } else {
-                        DEBUG_FUNCTION_LINE("Failed to alloc memory");
+#define TMP_BUNDLE_NAME "romfscheck"
+
+            if (WUHBUtils_MountBundle(TMP_BUNDLE_NAME, dirList.GetFilepath(i), BundleSource_FileDescriptor, &result) == WUHB_UTILS_RESULT_SUCCESS && result >= 0) {
+                uint8_t *buffer;
+                uint32_t bufferSize;
+
+                auto readRes = WUHBUtils_ReadWholeFile(TMP_BUNDLE_NAME ":/meta/meta.ini", &buffer, &bufferSize);
+                if (readRes == WUHB_UTILS_RESULT_SUCCESS) {
+                    buffer[bufferSize - 1] = '\0';
+                    if (ini_parse_string((const char *) buffer, handler, &gFileInfos[j]) < 0) {
+                        DEBUG_FUNCTION_LINE_ERR("Failed to parse meta.ini");
                     }
-
-                    RL_FileClose(file_handle);
+                    free(buffer);
+                    buffer = nullptr;
+                } else {
+                    DEBUG_FUNCTION_LINE_ERR("Failed to open or read meta.ini: %d", readRes);
                 }
 
-                bool foundSplashScreens = true;
-                if (!RL_FileExists("romfscheck:/meta/bootTvTex.tga")) {
-                    foundSplashScreens = false;
-                }
-                if (!RL_FileExists("romfscheck:/meta/bootDrcTex.tga")) {
-                    foundSplashScreens = false;
-                }
-                if (foundSplashScreens) {
+                auto bootTvTexPath  = TMP_BUNDLE_NAME ":/meta/bootTvTex.tga";
+                auto bootDrcTexPath = TMP_BUNDLE_NAME ":/meta/bootDrcTex.tga";
+                if (CheckFileExistsHelper(bootTvTexPath) && CheckFileExistsHelper(bootDrcTexPath)) {
                     // Show splash screens
                     cur_title_info->appType = MCP_APP_TYPE_GAME;
                 }
-                RL_UnmountBundle("romfscheck");
+
+                int32_t unmountRes;
+                if (WUHBUtils_UnmountBundle(TMP_BUNDLE_NAME, &unmountRes) == WUHB_UTILS_RESULT_SUCCESS) {
+                    if (unmountRes != 0) {
+                        DEBUG_FUNCTION_LINE_ERR("Unmount result was \"%s\"", TMP_BUNDLE_NAME);
+                    }
+                } else {
+                    DEBUG_FUNCTION_LINE_ERR("Failed to unmount \"%s\"", TMP_BUNDLE_NAME);
+                }
             } else {
-                DEBUG_FUNCTION_LINE("%s is not a valid .wuhb file: %d", dirList.GetFilepath(i), result);
+                DEBUG_FUNCTION_LINE("%s is not a .wuhb file: %d", dirList.GetFilepath(i), result);
                 continue;
             }
         }
@@ -299,11 +311,26 @@ void readCustomTitlesFromSD() {
     }
 }
 
+bool CheckFileExistsHelper(const char *path) {
+    int32_t exists;
+    int32_t res;
+    if ((res = WUHBUtils_FileExists(path, &exists)) == WUHB_UTILS_RESULT_SUCCESS) {
+        if (!exists) {
+            DEBUG_FUNCTION_LINE_VERBOSE("## WARN ##: Missing %s", path);
+            return false;
+        }
+        return true;
+    }
+    DEBUG_FUNCTION_LINE_ERR("Failed to check if %s exists: %d", path, res);
+
+    return false;
+}
+
 DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, MCPTitleListType *titleList, uint32_t size) {
     int32_t result      = real_MCP_TitleList(handle, outTitleCount, titleList, size);
     uint32_t titlecount = *outTitleCount;
 
-    OSLockMutex(&fileinfoMutex);
+    std::lock_guard<std::mutex> lock(fileinfoMutex);
     for (auto &gFileInfo : gFileInfos) {
         if (gFileInfo.lowerTitleID == 0) {
             break;
@@ -311,7 +338,6 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
         memcpy(&(titleList[titlecount]), &(gFileInfo.titleInfo), sizeof(gFileInfo.titleInfo));
         titlecount++;
     }
-    OSUnlockMutex(&fileinfoMutex);
 
     *outTitleCount = titlecount;
 
@@ -330,10 +356,10 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
 
             gHomebrewLaunched = TRUE;
 
-            RL_LoadFromSDOnNextLaunch(gFileInfos[id].path);
+            RPXLoader_LoadFromSDOnNextLaunch(gFileInfos[id].path);
             return 0;
         } else {
-            DEBUG_FUNCTION_LINE("Failed to get the id for titleID %016llX", title->titleId);
+            DEBUG_FUNCTION_LINE_ERR("Failed to get the id for titleID %016llX", title->titleId);
         }
     }
 
@@ -341,17 +367,19 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
     return result;
 }
 
-DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, const char *mode, int *handle, int error) {
+DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, const char *mode, uint32_t *handle, int error) {
     const char *start   = "/vol/storage_mlc01/sys/title/0005000F";
     const char *icon    = ".tga";
     const char *iconTex = "iconTex.tga";
     const char *sound   = ".btsnd";
 
-    if (StringTools::EndsWith(path, icon) || StringTools::EndsWith(path, sound)) {
+    std::string_view pathStr = path;
+
+    if (pathStr.ends_with(icon) || pathStr.ends_with(sound)) {
         if (strncmp(path, start, strlen(start)) == 0) {
             int res = FS_STATUS_NOT_FOUND;
 
-            if (StringTools::EndsWith(path, iconTex)) {
+            if (pathStr.ends_with(iconTex)) {
                 // fallback to dummy icon if loaded homebrew is no .wuhb
                 *handle = 0x13371338;
                 res     = FS_STATUS_OK;
@@ -364,14 +392,14 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
             sscanf(id, "%08X", &lowerTitleID);
             int32_t idVal = getIDByLowerTitleID(lowerTitleID);
             if (idVal >= 0) {
-                if (!StringTools::EndsWith(gFileInfos[idVal].filename, ".wuhb")) {
+                if (!std::string_view(gFileInfos[idVal].filename).ends_with(".wuhb")) {
                     return res;
                 }
                 if (OpenFileForID(idVal, ending, handle) >= 0) {
                     return FS_STATUS_OK;
                 }
             } else {
-                DEBUG_FUNCTION_LINE("Failed to find id for titleID %08X", lowerTitleID);
+                DEBUG_FUNCTION_LINE_ERR("Failed to find id for titleID %08X", lowerTitleID);
             }
             return res;
         }
@@ -387,17 +415,18 @@ DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFile
     } else if ((handle & 0xFF000000) == 0xFF000000) {
         int32_t fd    = (handle & 0x00000FFF);
         int32_t romid = (handle & 0x00FFF000) >> 12;
-        OSLockMutex(&fileinfoMutex);
+        std::lock_guard<std::mutex> lock(fileinfoMutex);
         uint32_t rl_handle = gFileHandleWrapper[fd].handle;
-        RL_FileClose(rl_handle);
+        if (WUHBUtils_FileClose(rl_handle) != WUHB_UTILS_RESULT_SUCCESS) {
+            DEBUG_FUNCTION_LINE_ERR("Failed to close file %08X", rl_handle);
+        }
         if (gFileInfos[romid].openedFiles--) {
             DCFlushRange(&gFileInfos[romid].openedFiles, 4);
             if (gFileInfos[romid].openedFiles <= 0) {
-                DEBUG_FUNCTION_LINE("unmount romfs no more handles");
+                DEBUG_FUNCTION_LINE_VERBOSE("unmount romfs no more handles");
                 unmountRomfs(romid);
             }
         }
-        OSUnlockMutex(&fileinfoMutex);
         return FS_STATUS_OK;
     }
     return real_FSCloseFile(client, block, handle, flags);
@@ -412,14 +441,18 @@ DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t
         memcpy(buffer, iconTex_tga, cpySize);
         return (FSStatus) (cpySize / size);
     } else if ((handle & 0xFF000000) == 0xFF000000) {
-        int32_t fd    = (handle & 0x00000FFF);
-        int32_t romid = (handle & 0x00FFF000) >> 12;
+        uint32_t fd                     = (handle & 0x00000FFF);
+        [[maybe_unused]] uint32_t romid = (handle & 0x00FFF000) >> 12;
 
         uint32_t rl_handle = gFileHandleWrapper[fd].handle;
 
-        int readSize = RL_FileRead(rl_handle, buffer, (size * count));
-
-        return (FSStatus) (readSize / size);
+        int readSize = 0;
+        if (WUHBUtils_FileRead(rl_handle, buffer, (size * count), &readSize) == WUHB_UTILS_RESULT_SUCCESS) {
+            return (FSStatus) (readSize / size);
+        } else {
+            DEBUG_FUNCTION_LINE_ERR("Failed to read file");
+            OSFatal("Failed to read file");
+        }
     }
     FSStatus result = real_FSReadFile(client, block, buffer, size, count, handle, unk1, flags);
     return result;
@@ -577,7 +610,7 @@ DECL_FUNCTION(uint32_t, MCPGetTitleInternal, uint32_t mcp_handle, void *input, u
                     return 1;
                 }
             }
-            DEBUG_FUNCTION_LINE("Failed to find lower TID %08X", inputPtrAsU32[1]);
+            DEBUG_FUNCTION_LINE_ERR("Failed to find lower TID %08X", inputPtrAsU32[1]);
         }
     }
 

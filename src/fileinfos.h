@@ -2,6 +2,9 @@
 
 #include <coreinit/mcp.h>
 #include <cstdint>
+#include <mutex>
+
+extern std::mutex fileinfoMutex;
 
 typedef struct WUT_PACKED FileInfos_ {
     char path[256];

@@ -1,19 +1,20 @@
 #include "FileWrapper.h"
 #include "fileinfos.h"
+#include "utils/StringTools.h"
 #include "utils/logger.h"
 #include <coreinit/cache.h>
-#include <coreinit/mutex.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <rpxloader.h>
+#include <mutex>
+#include <wuhb_utils/utils.h>
 
 FileHandleWrapper gFileHandleWrapper[FILE_WRAPPER_SIZE] __attribute__((section(".data")));
 
-extern OSMutex fileWrapperMutex;
+std::mutex fileWrapperMutex;
 
 int FileHandleWrapper_GetSlot() {
-    OSLockMutex(&fileWrapperMutex);
+    std::lock_guard<std::mutex> lock(fileWrapperMutex);
     int res = -1;
     for (int i = 0; i < FILE_WRAPPER_SIZE; i++) {
         if (!gFileHandleWrapper[i].inUse) {
@@ -23,7 +24,6 @@ int FileHandleWrapper_GetSlot() {
         }
     }
     OSMemoryBarrier();
-    OSUnlockMutex(&fileWrapperMutex);
     return res;
 }
 
@@ -31,24 +31,22 @@ bool FileHandleWrapper_FreeSlot(uint32_t slot) {
     if (slot >= FILE_WRAPPER_SIZE) {
         return false;
     }
-    OSLockMutex(&fileWrapperMutex);
+    std::lock_guard<std::mutex> lock(fileWrapperMutex);
     gFileHandleWrapper[slot].handle = 0;
     gFileHandleWrapper[slot].inUse  = false;
     OSMemoryBarrier();
-    OSUnlockMutex(&fileWrapperMutex);
     return -1;
 }
 
 bool FileHandleWrapper_FreeAll() {
-    OSLockMutex(&fileWrapperMutex);
+    std::lock_guard<std::mutex> lock(fileWrapperMutex);
     for (int i = 0; i < FILE_WRAPPER_SIZE; i++) {
         FileHandleWrapper_FreeSlot(i);
     }
-    OSUnlockMutex(&fileWrapperMutex);
     return -1;
 }
 
-int OpenFileForID(int id, const char *filepath, int *handle) {
+int OpenFileForID(int id, const char *filepath, uint32_t *handle) {
     if (!mountRomfs(id)) {
         return -1;
     }
@@ -68,29 +66,29 @@ int OpenFileForID(int id, const char *filepath, int *handle) {
         }
         last = filepath[i];
     }
-    dyn_path[j++] = 0;
+    dyn_path[j] = 0;
 
-    char completePath[256];
-    snprintf(completePath, 256, "%s:/%s", romName, dyn_path);
-    free(dyn_path);
+    auto completePath = string_format("%s:/%s", romName, dyn_path);
 
-    uint32_t out_handle = 0;
-    if (RL_FileOpen(completePath, &out_handle) == 0) {
+    WUHBFileHandle fileHandle = 0;
+    if (WUHBUtils_FileOpen(completePath.c_str(), &fileHandle) == WUHB_UTILS_RESULT_SUCCESS) {
         int handle_wrapper_slot = FileHandleWrapper_GetSlot();
 
         if (handle_wrapper_slot < 0) {
-            DEBUG_FUNCTION_LINE("No free slot");
-            RL_FileClose(out_handle);
+            DEBUG_FUNCTION_LINE_ERR("No free slot");
+            if (WUHBUtils_FileClose(fileHandle) != WUHB_UTILS_RESULT_SUCCESS) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to close file %08X", fileHandle);
+            }
             unmountRomfs(id);
             return -2;
         }
-        gFileHandleWrapper[handle_wrapper_slot].handle = out_handle;
+        gFileHandleWrapper[handle_wrapper_slot].handle = fileHandle;
         *handle                                        = 0xFF000000 | (id << 12) | (handle_wrapper_slot & 0x00000FFF);
         gFileInfos[id].openedFiles++;
         return 0;
     } else {
+        DEBUG_FUNCTION_LINE_ERR("Failed to open file %s", filepath);
         if (gFileInfos[id].openedFiles == 0) {
-            DEBUG_FUNCTION_LINE("unmount");
             unmountRomfs(id);
         }
     }
