@@ -71,7 +71,7 @@ void initSaveData() {
 DECL_FUNCTION(int32_t, LoadConsoleAccount__Q2_2nn3actFUc13ACTLoadOptionPCcb, nn::act::SlotNo slot, nn::act::ACTLoadOption unk1, char const *unk2, bool unk3) {
     int32_t result = real_LoadConsoleAccount__Q2_2nn3actFUc13ACTLoadOptionPCcb(slot, unk1, unk2, unk3);
     if (result >= 0 && gInWiiUMenu) {
-        DEBUG_FUNCTION_LINE_VERBOSE("Changed account, we need to init the save data");
+        DEBUG_FUNCTION_LINE("Changed account, we need to init the save data");
         // If the account has changed, we need to init save data for this account
         // Calls our function replacement.
         SAVEInit();

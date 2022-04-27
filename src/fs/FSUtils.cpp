@@ -132,7 +132,7 @@ int32_t FSUtils::CreateSubfolder(const char *fullpath) {
 int32_t FSUtils::saveBufferToFile(const char *path, void *buffer, uint32_t size) {
     CFile file(path, CFile::WriteOnly);
     if (!file.isOpen()) {
-        DEBUG_FUNCTION_LINE("Failed to open %s\n", path);
+        DEBUG_FUNCTION_LINE_ERR("Failed to open %s\n", path);
         return 0;
     }
     int32_t written = file.write((const uint8_t *) buffer, size);
@@ -147,13 +147,13 @@ bool FSUtils::copyFile(const std::string &in, const std::string &out) {
 
     int source = open(in.c_str(), O_RDONLY, 0);
     if (source < 0) {
-        DEBUG_FUNCTION_LINE("Failed to open source %s", in.c_str());
+        DEBUG_FUNCTION_LINE_ERR("Failed to open source %s", in.c_str());
 
         return false;
     }
     int dest = open(out.c_str(), 0x602, 0644);
     if (dest < 0) {
-        DEBUG_FUNCTION_LINE("Failed to open dest %s", out.c_str());
+        DEBUG_FUNCTION_LINE_ERR("Failed to open dest %s", out.c_str());
         close(source);
         return false;
     }
@@ -161,7 +161,7 @@ bool FSUtils::copyFile(const std::string &in, const std::string &out) {
     auto bufferSize = 128 * 1024;
     char *buf       = (char *) malloc(bufferSize);
     if (buf == nullptr) {
-        DEBUG_FUNCTION_LINE("Failed to alloc buffer");
+        DEBUG_FUNCTION_LINE_ERR("Failed to alloc buffer");
         return false;
     }
 

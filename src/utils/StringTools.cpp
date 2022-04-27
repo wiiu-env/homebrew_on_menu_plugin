@@ -69,7 +69,7 @@ const char *StringTools::FullpathToFilename(const char *path) {
 void StringTools::RemoveDoubleSlashs(std::string &str) {
     uint32_t length = str.size();
 
-    //! clear path of double slashes
+    //! clear relativeFilepath of double slashes
     for (uint32_t i = 1; i < length; ++i) {
         if (str[i - 1] == '/' && str[i] == '/') {
             str.erase(i, 1);
