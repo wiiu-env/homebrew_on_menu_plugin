@@ -1,8 +1,9 @@
-#include "FileWrapper.h"
+#include "FileInfos.h"
 #include "SaveRedirection.h"
-#include "fileinfos.h"
 #include "filelist.h"
 #include "fs/FSUtils.h"
+#include "fs/FileReader.h"
+#include "fs/FileReaderWUHB.h"
 #include "utils/StringTools.h"
 #include "utils/ini.h"
 #include <content_redirection/redirection.h>
@@ -14,10 +15,12 @@
 #include <coreinit/systeminfo.h>
 #include <coreinit/title.h>
 #include <cstring>
+#include <forward_list>
 #include <fs/DirList.h>
 #include <malloc.h>
 #include <mutex>
 #include <nn/acp.h>
+#include <optional>
 #include <rpxloader/rpxloader.h>
 #include <sdutils/sdutils.h>
 #include <sysapp/launch.h>
@@ -38,12 +41,18 @@ WUPS_PLUGIN_AUTHOR("Maschell");
 WUPS_PLUGIN_LICENSE("GPL");
 
 #define UPPER_TITLE_ID_HOMEBREW 0x0005000F
-
 #define TITLE_ID_HOMEBREW_MASK  (((uint64_t) UPPER_TITLE_ID_HOMEBREW) << 32)
 
 ACPMetaXml gLaunchXML __attribute__((section(".data")));
 MCPTitleListType current_launched_title_info __attribute__((section(".data")));
 BOOL gHomebrewLaunched __attribute__((section(".data")));
+
+
+std::mutex fileInfosMutex;
+std::forward_list<std::shared_ptr<FileInfos>> fileInfos;
+
+std::mutex fileReaderListMutex;
+std::forward_list<std::unique_ptr<FileReader>> openFileReaders;
 
 void readCustomTitlesFromSD();
 
@@ -52,8 +61,6 @@ WUPS_USE_WUT_DEVOPTAB();
 INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
     memset((void *) &gLaunchXML, 0, sizeof(gLaunchXML));
-    memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
-    memset((void *) &gFileHandleWrapper, 0, sizeof(gFileHandleWrapper));
     gHomebrewLaunched = FALSE;
 
     // Use libwuhbutils.
@@ -82,6 +89,18 @@ bool sSDUtilsInitDone = false;
 bool sSDIsMounted     = false;
 bool sTitleRebooting  = false;
 
+
+void Cleanup() {
+    {
+        const std::lock_guard<std::mutex> lock1(fileReaderListMutex);
+        openFileReaders.clear();
+    }
+    {
+        const std::lock_guard<std::mutex> lock(fileInfosMutex);
+        fileInfos.clear();
+    }
+}
+
 void SDAttachedHandler([[maybe_unused]] SDUtilsAttachStatus status) {
     if (!sTitleRebooting) {
         _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), nullptr);
@@ -90,35 +109,31 @@ void SDAttachedHandler([[maybe_unused]] SDUtilsAttachStatus status) {
 }
 
 ON_APPLICATION_START() {
+    Cleanup();
     initLogging();
 
     if (OSGetTitleID() == 0x0005001010040000L || // Wii U Menu JPN
         OSGetTitleID() == 0x0005001010040100L || // Wii U Menu USA
         OSGetTitleID() == 0x0005001010040200L) { // Wii U Menu EUR
+        gInWiiUMenu = true;
 
         if (SDUtils_Init() >= 0) {
             sSDUtilsInitDone = true;
             sTitleRebooting  = false;
             SDUtils_AddAttachHandler(SDAttachedHandler);
         }
-        if (SDUtils_IsSdCardMounted(&sSDIsMounted) >= 0 && sSDIsMounted) {
-            readCustomTitlesFromSD();
-        }
     } else {
         gInWiiUMenu = false;
     }
 
     if (_SYSGetSystemApplicationTitleId(SYSTEM_APP_ID_HEALTH_AND_SAFETY) != OSGetTitleID()) {
-        DEBUG_FUNCTION_LINE("gHomebrewLaunched to FALSE");
         gHomebrewLaunched = FALSE;
     }
 }
 
 ON_APPLICATION_ENDS() {
+    Cleanup();
     SaveRedirectionCleanUp();
-    unmountAllRomfs();
-    memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
-    FileHandleWrapper_FreeAll();
     deinitLogging();
     gInWiiUMenu = false;
     if (sSDUtilsInitDone) {
@@ -129,19 +144,29 @@ ON_APPLICATION_ENDS() {
     sSDIsMounted = false;
 }
 
+
+std::optional<std::shared_ptr<FileInfos>> getIDByLowerTitleID(uint32_t titleid_lower) {
+    std::lock_guard<std::mutex> lock(fileInfosMutex);
+    for (auto &cur : fileInfos) {
+        if (cur->lowerTitleID == titleid_lower) {
+            return cur;
+        }
+    }
+    return {};
+}
+
 void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXml *out_buf) {
-    int32_t id = getIDByLowerTitleID(titleid_lower);
-    if (id < 0) {
-        DEBUG_FUNCTION_LINE_ERR("Failed to get id by titleid");
+    auto titleIdInfoOpt = getIDByLowerTitleID(titleid_lower);
+    if (!titleIdInfoOpt.has_value()) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to get info by titleid");
         return;
     }
-    if (id >= FILE_INFO_SIZE) {
-        return;
-    }
-    out_buf->title_id = ((uint64_t) titleid_upper * 0x100000000) + titleid_lower;
-    strncpy(out_buf->longname_en, gFileInfos[id].longname, 64);
-    strncpy(out_buf->shortname_en, gFileInfos[id].shortname, 64);
-    strncpy(out_buf->publisher_en, gFileInfos[id].author, 64);
+    auto &titleInfo = titleIdInfoOpt.value();
+
+    out_buf->title_id = (((uint64_t) titleid_upper) << 32) + titleid_lower;
+    strncpy(out_buf->longname_en, titleInfo->longname.c_str(), sizeof(out_buf->longname_en) - 1);
+    strncpy(out_buf->shortname_en, titleInfo->shortname.c_str(), sizeof(out_buf->shortname_en) - 1);
+    strncpy(out_buf->publisher_en, titleInfo->author.c_str(), sizeof(out_buf->publisher_en) - 1);
     out_buf->e_manual           = 1;
     out_buf->e_manual_version   = 0;
     out_buf->title_version      = 1;
@@ -157,34 +182,22 @@ void fillXmlForTitleID(uint32_t titleid_upper, uint32_t titleid_lower, ACPMetaXm
     out_buf->reserved_flag0     = 0x00010001;
     out_buf->reserved_flag6     = 0x00000003;
     out_buf->pc_usk             = 128;
-    strncpy(out_buf->product_code, "WUP-P-HBLD", strlen("WUP-P-HBLD") + 1);
-    strncpy(out_buf->content_platform, "WUP", strlen("WUP") + 1);
-    strncpy(out_buf->company_code, "0001", strlen("0001") + 1);
-}
-
-/* hash: compute hash value of string */
-unsigned int hash(char *str) {
-    unsigned int h;
-    unsigned char *p;
-
-    h = 0;
-    for (p = (unsigned char *) str; *p != '\0'; p++) {
-        h = 37 * h + *p;
-    }
-    return h; // or, h % ARRAY_SIZE;
+    strncpy(out_buf->product_code, "WUP-P-HBLD", sizeof(out_buf->product_code) - 1);
+    strncpy(out_buf->content_platform, "WUP", sizeof(out_buf->content_platform) - 1);
+    strncpy(out_buf->company_code, "0001", sizeof(out_buf->company_code) - 1);
 }
 
 static int handler(void *user, const char *section, const char *name,
                    const char *value) {
-    auto *fInfo = (FileInfos *) user;
+    auto *fInfo = (std::shared_ptr<FileInfos> *) user;
 #define MATCH(s, n) strcmp(section, s) == 0 && strcmp(name, n) == 0
 
     if (MATCH("menu", "longname")) {
-        strncpy(fInfo->longname, value, 64 - 1);
+        fInfo->operator->()->longname = value;
     } else if (MATCH("menu", "shortname")) {
-        strncpy(fInfo->shortname, value, 64 - 1);
+        fInfo->operator->()->shortname = value;
     } else if (MATCH("menu", "author")) {
-        strncpy(fInfo->author, value, 64 - 1);
+        fInfo->operator->()->author = value;
     } else {
         return 0; /* unknown section/name, error */
     }
@@ -194,20 +207,16 @@ static int handler(void *user, const char *section, const char *name,
 
 bool CheckFileExistsHelper(const char *path);
 void readCustomTitlesFromSD() {
+    std::lock_guard<std::mutex> lock(fileInfosMutex);
+    if (!fileInfos.empty()) {
+        DEBUG_FUNCTION_LINE_VERBOSE("Using cached value");
+        return;
+    }
     // Reset current infos
-    unmountAllRomfs();
-    memset((void *) &gFileInfos, 0, sizeof(gFileInfos));
-
     DirList dirList("fs:/vol/external01/wiiu/apps", ".rpx,.wuhb", DirList::Files | DirList::CheckSubfolders, 1);
     dirList.SortList();
 
-    int j = 0;
     for (int i = 0; i < dirList.GetFilecount(); i++) {
-        if (j >= FILE_INFO_SIZE) {
-            DEBUG_FUNCTION_LINE_ERR("TOO MANY TITLES");
-            break;
-        }
-
         //! skip wiiload temp files
         if (strcasecmp(dirList.GetFilename(i), "temp.rpx") == 0) {
             continue;
@@ -228,48 +237,61 @@ void readCustomTitlesFromSD() {
             continue;
         }
 
+
+
+
+
         auto repl  = "fs:/vol/external01/";
         auto input = dirList.GetFilepath(i);
+        const char * relativeFilepath;
 
         if (std::string_view(input).starts_with(repl)) {
-            strncpy(gFileInfos[j].path, &input[strlen(repl)], sizeof(gFileInfos[j].path));
+            relativeFilepath = &input[strlen(repl)];
         } else {
             DEBUG_FUNCTION_LINE_ERR("Skip %s, Path doesn't start with %s (This should never happen", input, repl);
             continue;
         }
 
-        gFileInfos[j].lowerTitleID = hash(gFileInfos[j].path);
+        auto fileInfo = make_shared_nothrow<FileInfos>(relativeFilepath);
+        if (!fileInfo) {
+            DEBUG_FUNCTION_LINE_ERR("No more memory");
+            break;
+        }
 
-        MCPTitleListType *cur_title_info = &(gFileInfos[j].titleInfo);
+        std::lock_guard<std::mutex> infoLock(fileInfo->accessLock);
 
-        snprintf(cur_title_info->path, sizeof(cur_title_info->path), "/custom/%08X%08X", UPPER_TITLE_ID_HOMEBREW, gFileInfos[j].lowerTitleID);
+        auto *cur_title_info = &(fileInfo->titleInfo);
 
-        strncpy(gFileInfos[j].filename, dirList.GetFilename(i), sizeof(gFileInfos[j].filename));
-        strncpy(gFileInfos[j].longname, dirList.GetFilename(i), sizeof(gFileInfos[j].longname));
-        strncpy(gFileInfos[j].shortname, dirList.GetFilename(i), sizeof(gFileInfos[j].shortname));
-        strncpy(gFileInfos[j].author, dirList.GetFilename(i), sizeof(gFileInfos[j].author));
-        gFileInfos[j].source = 0; //SD Card;
+        snprintf(cur_title_info->path, sizeof(cur_title_info->path), "/custom/%08X%08X", UPPER_TITLE_ID_HOMEBREW, fileInfo->lowerTitleID);
 
         const char *indexedDevice = "mlc";
-        strncpy(cur_title_info->indexedDevice, indexedDevice, sizeof(cur_title_info->indexedDevice));
+        strncpy(cur_title_info->indexedDevice, indexedDevice, sizeof(cur_title_info->indexedDevice) - 1);
+
+        fileInfo->filename  = dirList.GetFilename(i);
+        fileInfo->longname  = dirList.GetFilename(i);
+        fileInfo->shortname = dirList.GetFilename(i);
+        fileInfo->author    = dirList.GetFilename(i);
 
         // System apps don't have a splash screen.
         cur_title_info->appType = MCP_APP_TYPE_SYSTEM_APPS;
 
+        DEBUG_FUNCTION_LINE_VERBOSE("Check %s", fileInfo->filename.c_str());
+
         // Check if the bootTvTex and bootDrcTex exists
-        if (std::string_view(gFileInfos[j].filename).ends_with(".wuhb")) {
+        if (std::string_view(fileInfo->filename).ends_with(".wuhb")) {
             int result = 0;
 
 #define TMP_BUNDLE_NAME "romfscheck"
 
             if (WUHBUtils_MountBundle(TMP_BUNDLE_NAME, dirList.GetFilepath(i), BundleSource_FileDescriptor, &result) == WUHB_UTILS_RESULT_SUCCESS && result >= 0) {
+                fileInfo->isBundle = true;
                 uint8_t *buffer;
                 uint32_t bufferSize;
 
                 auto readRes = WUHBUtils_ReadWholeFile(TMP_BUNDLE_NAME ":/meta/meta.ini", &buffer, &bufferSize);
                 if (readRes == WUHB_UTILS_RESULT_SUCCESS) {
                     buffer[bufferSize - 1] = '\0';
-                    if (ini_parse_string((const char *) buffer, handler, &gFileInfos[j]) < 0) {
+                    if (ini_parse_string((const char *) buffer, handler, &fileInfo) < 0) {
                         DEBUG_FUNCTION_LINE_ERR("Failed to parse meta.ini");
                     }
                     free(buffer);
@@ -283,6 +305,7 @@ void readCustomTitlesFromSD() {
                 if (CheckFileExistsHelper(bootTvTexPath) && CheckFileExistsHelper(bootDrcTexPath)) {
                     // Show splash screens
                     cur_title_info->appType = MCP_APP_TYPE_GAME;
+                    DEBUG_FUNCTION_LINE_VERBOSE("Title has splashscreen");
                 }
 
                 int32_t unmountRes;
@@ -294,12 +317,12 @@ void readCustomTitlesFromSD() {
                     DEBUG_FUNCTION_LINE_ERR("Failed to unmount \"%s\"", TMP_BUNDLE_NAME);
                 }
             } else {
-                DEBUG_FUNCTION_LINE("%s is not a .wuhb file: %d", dirList.GetFilepath(i), result);
+                DEBUG_FUNCTION_LINE_ERR("%s is not a valid .wuhb file: %d", dirList.GetFilepath(i), result);
                 continue;
             }
         }
 
-        cur_title_info->titleId      = TITLE_ID_HOMEBREW_MASK | gFileInfos[j].lowerTitleID;
+        cur_title_info->titleId      = TITLE_ID_HOMEBREW_MASK | fileInfo->lowerTitleID;
         cur_title_info->titleVersion = 1;
         cur_title_info->groupId      = 0x400;
 
@@ -307,7 +330,7 @@ void readCustomTitlesFromSD() {
         cur_title_info->sdkVersion = __OSGetProcessSDKVersion();
         cur_title_info->unk0x60    = 0;
 
-        j++;
+        fileInfos.push_front(fileInfo);
     }
 }
 
@@ -327,39 +350,43 @@ bool CheckFileExistsHelper(const char *path) {
 }
 
 DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, MCPTitleListType *titleList, uint32_t size) {
-    int32_t result      = real_MCP_TitleList(handle, outTitleCount, titleList, size);
-    uint32_t titlecount = *outTitleCount;
+    int32_t result = real_MCP_TitleList(handle, outTitleCount, titleList, size);
 
-    std::lock_guard<std::mutex> lock(fileinfoMutex);
-    for (auto &gFileInfo : gFileInfos) {
-        if (gFileInfo.lowerTitleID == 0) {
-            break;
-        }
-        memcpy(&(titleList[titlecount]), &(gFileInfo.titleInfo), sizeof(gFileInfo.titleInfo));
-        titlecount++;
+    if (!gInWiiUMenu) {
+        DEBUG_FUNCTION_LINE_VERBOSE("Not in Wii U Menu");
+        return result;
     }
 
-    *outTitleCount = titlecount;
+    uint32_t titleCount = *outTitleCount;
+
+    std::lock_guard<std::mutex> lock(fileInfosMutex);
+    readCustomTitlesFromSD();
+
+    for (auto &gFileInfo : fileInfos) {
+        memcpy(&(titleList[titleCount]), &(gFileInfo->titleInfo), sizeof(MCPTitleListType));
+        titleCount++;
+    }
+
+    *outTitleCount = titleCount;
 
     return result;
 }
 
 DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *title, uint32_t u2) {
     if ((title->titleId & TITLE_ID_HOMEBREW_MASK) == TITLE_ID_HOMEBREW_MASK) {
-        int32_t id = getIDByLowerTitleID(title->titleId & 0xFFFFFFFF);
-        if (id >= 0) {
+        std::lock_guard<std::mutex> lock(fileInfosMutex);
+        auto fileInfo = getIDByLowerTitleID(title->titleId & 0xFFFFFFFF);
+        if (fileInfo.has_value()) {
             DEBUG_FUNCTION_LINE("Starting a homebrew title");
 
             fillXmlForTitleID((title->titleId & 0xFFFFFFFF00000000) >> 32, (title->titleId & 0xFFFFFFFF), &gLaunchXML);
 
-            std::string bundleFilePath = std::string("/vol/external01/") + gFileInfos[id].path;
-
             gHomebrewLaunched = TRUE;
 
-            RPXLoader_LoadFromSDOnNextLaunch(gFileInfos[id].path);
+            RPXLoader_LoadFromSDOnNextLaunch(fileInfo.value()->relativeFilepath.c_str());
             return 0;
         } else {
-            DEBUG_FUNCTION_LINE_ERR("Failed to get the id for titleID %016llX", title->titleId);
+            DEBUG_FUNCTION_LINE_ERR("Failed to get info for titleID %016llX", title->titleId);
         }
     }
 
@@ -367,41 +394,42 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
     return result;
 }
 
+
 DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, const char *mode, uint32_t *handle, int error) {
     const char *start   = "/vol/storage_mlc01/sys/title/0005000F";
-    const char *icon    = ".tga";
+    const char *tga     = ".tga";
     const char *iconTex = "iconTex.tga";
     const char *sound   = ".btsnd";
 
     std::string_view pathStr = path;
 
-    if (pathStr.ends_with(icon) || pathStr.ends_with(sound)) {
-        if (strncmp(path, start, strlen(start)) == 0) {
-            int res = FS_STATUS_NOT_FOUND;
-
-            if (pathStr.ends_with(iconTex)) {
-                // fallback to dummy icon if loaded homebrew is no .wuhb
-                *handle = 0x13371338;
-                res     = FS_STATUS_OK;
-            }
-
-            uint32_t lowerTitleID;
-            char *id     = path + 1 + strlen(start);
-            id[8]        = 0;
-            char *ending = id + 9;
-            sscanf(id, "%08X", &lowerTitleID);
-            int32_t idVal = getIDByLowerTitleID(lowerTitleID);
-            if (idVal >= 0) {
-                if (!std::string_view(gFileInfos[idVal].filename).ends_with(".wuhb")) {
-                    return res;
+    if (pathStr.starts_with(start)) {
+        std::unique_ptr<FileReader> reader;
+        if (pathStr.ends_with(tga) || pathStr.ends_with(sound)) {
+            char *id           = path + 1 + strlen(start);
+            id[8]              = 0;
+            char *relativePath = id + 9;
+            auto lowerTitleID  = strtoul(id, 0, 16);
+            auto fileInfo      = getIDByLowerTitleID(lowerTitleID);
+            if (fileInfo.has_value()) {
+                reader = make_unique_nothrow<FileReaderWUHB>(fileInfo.value(), relativePath, !gHomebrewLaunched);
+                if (reader && !reader->isReady()) {
+                    reader.reset();
                 }
-                if (OpenFileForID(idVal, ending, handle) >= 0) {
-                    return FS_STATUS_OK;
-                }
-            } else {
-                DEBUG_FUNCTION_LINE_ERR("Failed to find id for titleID %08X", lowerTitleID);
             }
-            return res;
+        }
+        // If the icon is requested and loading it from a bundle failed, we fall back to a default one.
+        if (reader == nullptr && pathStr.ends_with(iconTex)) {
+            reader = make_unique_nothrow<FileReader>((uint8_t *) iconTex_tga, iconTex_tga_size);
+            if (reader && !reader->isReady()) {
+                reader.reset();
+            }
+        }
+        if (reader) {
+            std::lock_guard<std::mutex> lock(fileReaderListMutex);
+            *handle = reader->getHandle();
+            openFileReaders.push_front(std::move(reader));
+            return FS_STATUS_OK;
         }
     }
 
@@ -410,48 +438,18 @@ DECL_FUNCTION(int, FSOpenFile, FSClient *client, FSCmdBlock *block, char *path, 
 }
 
 DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFileHandle handle, uint32_t flags) {
-    if (handle == 0x13371338) {
-        return FS_STATUS_OK;
-    } else if ((handle & 0xFF000000) == 0xFF000000) {
-        int32_t fd    = (handle & 0x00000FFF);
-        int32_t romid = (handle & 0x00FFF000) >> 12;
-        std::lock_guard<std::mutex> lock(fileinfoMutex);
-        uint32_t rl_handle = gFileHandleWrapper[fd].handle;
-        if (WUHBUtils_FileClose(rl_handle) != WUHB_UTILS_RESULT_SUCCESS) {
-            DEBUG_FUNCTION_LINE_ERR("Failed to close file %08X", rl_handle);
-        }
-        if (gFileInfos[romid].openedFiles--) {
-            DCFlushRange(&gFileInfos[romid].openedFiles, 4);
-            if (gFileInfos[romid].openedFiles <= 0) {
-                DEBUG_FUNCTION_LINE_VERBOSE("unmount romfs no more handles");
-                unmountRomfs(romid);
-            }
-        }
+    if (remove_locked_first_if(fileReaderListMutex, openFileReaders, [handle](auto &cur) { return cur->getHandle() == handle; })) {
         return FS_STATUS_OK;
     }
+
     return real_FSCloseFile(client, block, handle, flags);
 }
 
 DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t *buffer, uint32_t size, uint32_t count, FSFileHandle handle, uint32_t unk1, uint32_t flags) {
-    if (handle == 0x13371338) {
-        uint32_t cpySize = size * count;
-        if (iconTex_tga_size < cpySize) {
-            cpySize = iconTex_tga_size;
-        }
-        memcpy(buffer, iconTex_tga, cpySize);
-        return (FSStatus) (cpySize / size);
-    } else if ((handle & 0xFF000000) == 0xFF000000) {
-        uint32_t fd                     = (handle & 0x00000FFF);
-        [[maybe_unused]] uint32_t romid = (handle & 0x00FFF000) >> 12;
-
-        uint32_t rl_handle = gFileHandleWrapper[fd].handle;
-
-        int readSize = 0;
-        if (WUHBUtils_FileRead(rl_handle, buffer, (size * count), &readSize) == WUHB_UTILS_RESULT_SUCCESS) {
-            return (FSStatus) (readSize / size);
-        } else {
-            DEBUG_FUNCTION_LINE_ERR("Failed to read file");
-            OSFatal("Failed to read file");
+    const std::lock_guard<std::mutex> lock(fileReaderListMutex);
+    for (auto &reader : openFileReaders) {
+        if ((uint32_t) reader.get() == (uint32_t) handle) {
+            return (FSStatus) (reader->read(buffer, size * count) / size);
         }
     }
     FSStatus result = real_FSReadFile(client, block, buffer, size, count, handle, unk1, flags);
@@ -604,9 +602,9 @@ DECL_FUNCTION(uint32_t, MCPGetTitleInternal, uint32_t mcp_handle, void *input, u
     if (input != nullptr) {
         auto *inputPtrAsU32 = (uint32_t *) input;
         if (inputPtrAsU32[0] == UPPER_TITLE_ID_HOMEBREW && out_cnt >= 1) {
-            for (auto &gFileInfo : gFileInfos) {
-                if (gFileInfo.lowerTitleID == inputPtrAsU32[1]) {
-                    memcpy(&titles[0], &(gFileInfo.titleInfo), sizeof(MCPTitleListType));
+            for (auto &gFileInfo : fileInfos) {
+                if (gFileInfo->lowerTitleID == inputPtrAsU32[1]) {
+                    memcpy(&titles[0], &(gFileInfo->titleInfo), sizeof(MCPTitleListType));
                     return 1;
                 }
             }
