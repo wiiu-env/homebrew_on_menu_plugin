@@ -11,7 +11,7 @@ class FileReaderWUHB : public FileReader {
     bool autoUnmount          = false;
 
 public:
-    explicit FileReaderWUHB(const std::shared_ptr<FileInfos>& info, const std::string &relativeFilepath, bool autoUnmount);
+    explicit FileReaderWUHB(const std::shared_ptr<FileInfos> &info, const std::string &relativeFilepath, bool autoUnmount);
     ~FileReaderWUHB() override;
     int64_t read(uint8_t *buffer, uint32_t size) override;
     bool isReady() override;

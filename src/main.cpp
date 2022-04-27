@@ -47,7 +47,6 @@ ACPMetaXml gLaunchXML __attribute__((section(".data")));
 MCPTitleListType current_launched_title_info __attribute__((section(".data")));
 BOOL gHomebrewLaunched __attribute__((section(".data")));
 
-
 std::mutex fileInfosMutex;
 std::forward_list<std::shared_ptr<FileInfos>> fileInfos;
 
@@ -238,12 +237,9 @@ void readCustomTitlesFromSD() {
         }
 
 
-
-
-
         auto repl  = "fs:/vol/external01/";
         auto input = dirList.GetFilepath(i);
-        const char * relativeFilepath;
+        const char *relativeFilepath;
 
         if (std::string_view(input).starts_with(repl)) {
             relativeFilepath = &input[strlen(repl)];
