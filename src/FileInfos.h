@@ -1,10 +1,10 @@
 #pragma once
 #include "utils/logger.h"
+#include "utils/utils.h"
 #include <coreinit/mcp.h>
 #include <mutex>
 #include <string>
 #include <wuhb_utils/utils.h>
-#include "utils/utils.h"
 
 class FileInfos {
 public:

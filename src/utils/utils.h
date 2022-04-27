@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <forward_list>
 #include <malloc.h>
+#include <memory>
+#include <mutex>
 
 uint32_t hash_string(const char *);
 
@@ -29,4 +31,3 @@ bool remove_locked_first_if(std::mutex &mutex, std::forward_list<T, Allocator> &
     }
     return false;
 }
-

@@ -8,11 +8,11 @@
 extern "C" {
 #endif
 
-#define LOG_APP_TYPE   "P"
-#define LOG_APP_NAME   "homebrew_on_menu"
+#define LOG_APP_TYPE                "P"
+#define LOG_APP_NAME                "homebrew_on_menu"
 
-#define __FILENAME_X__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
-#define __FILENAME__   (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILENAME_X__)
+#define __FILENAME_X__              (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
+#define __FILENAME__                (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILENAME_X__)
 
 #define LOG(LOG_FUNC, FMT, ARGS...) LOG_EX(LOG_FUNC, "", "", FMT, ##ARGS)
 

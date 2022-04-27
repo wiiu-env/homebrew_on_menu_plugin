@@ -19,7 +19,7 @@ public:
 
     virtual bool isReady();
 
-    virtual uint32_t getHandle(){
+    virtual uint32_t getHandle() {
         return reinterpret_cast<uint32_t>(this);
     }
 

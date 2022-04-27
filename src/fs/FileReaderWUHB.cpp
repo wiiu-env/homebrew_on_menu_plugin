@@ -4,7 +4,7 @@
 #include <coreinit/cache.h>
 #include <wuhb_utils/utils.h>
 
-FileReaderWUHB::FileReaderWUHB(const std::shared_ptr<FileInfos>& info, const std::string &relativeFilepath, bool autoUnmount) {
+FileReaderWUHB::FileReaderWUHB(const std::shared_ptr<FileInfos> &info, const std::string &relativeFilepath, bool autoUnmount) {
     if (!info) {
         DEBUG_FUNCTION_LINE_ERR("Info was NULL");
         return;
