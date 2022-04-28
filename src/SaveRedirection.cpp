@@ -15,6 +15,7 @@ CRLayerHandle saveLayer __attribute__((section(".data"))) = 0;
 
 void SaveRedirectionCleanUp() {
     if (saveLayer != 0) {
+        DEBUG_FUNCTION_LINE("Remove save redirection: %s -> %s", "/vol/save", "fs:" SAVE_REPLACEMENT_PATH "/save/");
         auto res = ContentRedirection_RemoveFSLayer(saveLayer);
         if (res != CONTENT_REDIRECTION_RESULT_SUCCESS) {
             DEBUG_FUNCTION_LINE_ERR("Failed to remove save FSLayer");
@@ -22,7 +23,8 @@ void SaveRedirectionCleanUp() {
         saveLayer = 0;
     }
 }
-void initSaveData() {
+
+void CopyExistingFiles() {
     nn::act::Initialize();
     nn::act::PersistentId persistentId = nn::act::GetPersistentId();
     nn::act::Finalize();
@@ -61,7 +63,13 @@ void initSaveData() {
             DEBUG_FUNCTION_LINE_ERR("Failed to copy file: %s -> %s", BaristaIconDataBaseOriginal.c_str(), BaristaIconDataBase.c_str());
         }
     }
+}
+
+void initSaveData() {
+    CopyExistingFiles();
+
     SaveRedirectionCleanUp();
+    DEBUG_FUNCTION_LINE("Setup save redirection: %s -> %s", "/vol/save", "fs:" SAVE_REPLACEMENT_PATH "/save/");
     auto res = ContentRedirection_AddFSLayer(&saveLayer, "homp_save_redirection", "fs:" SAVE_REPLACEMENT_PATH "/save/", FS_LAYER_TYPE_SAVE_REPLACE);
     if (res != CONTENT_REDIRECTION_RESULT_SUCCESS) {
         DEBUG_FUNCTION_LINE_ERR("Failed to add save FS Layer: %d", res);
@@ -73,8 +81,7 @@ DECL_FUNCTION(int32_t, LoadConsoleAccount__Q2_2nn3actFUc13ACTLoadOptionPCcb, nn:
     if (result >= 0 && gInWiiUMenu) {
         DEBUG_FUNCTION_LINE("Changed account, we need to init the save data");
         // If the account has changed, we need to init save data for this account
-        // Calls our function replacement.
-        SAVEInit();
+        CopyExistingFiles();
     }
 
     return result;
