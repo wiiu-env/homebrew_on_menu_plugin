@@ -88,7 +88,6 @@ bool sSDUtilsInitDone = false;
 bool sSDIsMounted     = false;
 bool sTitleRebooting  = false;
 
-
 void Cleanup() {
     {
         const std::lock_guard<std::mutex> lock1(fileReaderListMutex);
@@ -110,6 +109,7 @@ void SDAttachedHandler([[maybe_unused]] SDUtilsAttachStatus status) {
 ON_APPLICATION_START() {
     Cleanup();
     initLogging();
+    sSDIsMounted = false;
 
     if (OSGetTitleID() == 0x0005001010040000L || // Wii U Menu JPN
         OSGetTitleID() == 0x0005001010040100L || // Wii U Menu USA
@@ -117,9 +117,17 @@ ON_APPLICATION_START() {
         gInWiiUMenu = true;
 
         if (SDUtils_Init() >= 0) {
+            DEBUG_FUNCTION_LINE("SDUtils_Init done");
             sSDUtilsInitDone = true;
             sTitleRebooting  = false;
-            SDUtils_AddAttachHandler(SDAttachedHandler);
+            if (SDUtils_AddAttachHandler(SDAttachedHandler) != SDUTILS_RESULT_SUCCESS) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to add AttachedHandler");
+            }
+            if (SDUtils_IsSdCardMounted(&sSDIsMounted) != SDUTILS_RESULT_SUCCESS) {
+                DEBUG_FUNCTION_LINE_ERR("IsSdCardMounted failed");
+            }
+        } else {
+            DEBUG_FUNCTION_LINE_ERR("Failed to init SDUtils. Make sure to have the SDHotSwapModule loaded!");
         }
     } else {
         gInWiiUMenu = false;
@@ -142,7 +150,6 @@ ON_APPLICATION_ENDS() {
     }
     sSDIsMounted = false;
 }
-
 
 std::optional<std::shared_ptr<FileInfos>> getIDByLowerTitleID(uint32_t titleid_lower) {
     std::lock_guard<std::mutex> lock(fileInfosMutex);
