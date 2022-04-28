@@ -87,9 +87,14 @@ DECL_FUNCTION(int32_t, LoadConsoleAccount__Q2_2nn3actFUc13ACTLoadOptionPCcb, nn:
     return result;
 }
 
+extern bool sSDIsMounted;
 DECL_FUNCTION(int32_t, SAVEInit) {
     auto res = real_SAVEInit();
     if (res >= 0) {
+        if (!sSDIsMounted) {
+            DEBUG_FUNCTION_LINE_VERBOSE("Skip SD redirection, no SD Card is mounted");
+            return res;
+        }
         if (OSGetTitleID() == 0x0005001010040000L || // Wii U Menu JPN
             OSGetTitleID() == 0x0005001010040100L || // Wii U Menu USA
             OSGetTitleID() == 0x0005001010040200L) { // Wii U Menu EUR
