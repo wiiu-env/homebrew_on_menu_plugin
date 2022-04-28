@@ -15,4 +15,5 @@ public:
     ~FileReaderWUHB() override;
     int64_t read(uint8_t *buffer, uint32_t size) override;
     bool isReady() override;
+    void UnmountBundle();
 };

@@ -28,6 +28,9 @@ FileReaderWUHB::FileReaderWUHB(const std::shared_ptr<FileInfos> &info, const std
     WUHBUtilsStatus status;
     if ((status = WUHBUtils_FileOpen(filepath.c_str(), &this->fileHandle)) != WUHB_UTILS_RESULT_SUCCESS) {
         DEBUG_FUNCTION_LINE("Failed to open file in bundle: %s error: %d", filepath.c_str(), status);
+
+        UnmountBundle();
+
         return;
     }
     this->info->fileCount++;
@@ -51,13 +54,7 @@ FileReaderWUHB::~FileReaderWUHB() {
         info->fileCount--;
     }
 
-    if (autoUnmount && info->fileCount <= 0) {
-        if (!info->UnmountBundle()) {
-            DEBUG_FUNCTION_LINE_ERR("Failed to unmount");
-        }
-    } else {
-        DEBUG_FUNCTION_LINE_VERBOSE("Filecount is %d, we don't want to unmount yet", info->fileCount);
-    }
+    UnmountBundle();
     OSMemoryBarrier();
 }
 
@@ -76,4 +73,13 @@ int64_t FileReaderWUHB::read(uint8_t *buffer, uint32_t size) {
 
 bool FileReaderWUHB::isReady() {
     return this->initDone;
+}
+void FileReaderWUHB::UnmountBundle() {
+    if (autoUnmount && info->fileCount <= 0) {
+        if (!info->UnmountBundle()) {
+            DEBUG_FUNCTION_LINE_ERR("Failed to unmount");
+        }
+    } else {
+        DEBUG_FUNCTION_LINE_VERBOSE("Filecount is %d, we don't want to unmount yet", info->fileCount);
+    }
 }
