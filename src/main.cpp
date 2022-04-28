@@ -99,6 +99,10 @@ void Cleanup() {
     }
 }
 
+void SDCleanUpHandlesHandler() {
+    Cleanup();
+}
+
 void SDAttachedHandler([[maybe_unused]] SDUtilsAttachStatus status) {
     if (!sTitleRebooting) {
         _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), nullptr);
@@ -123,6 +127,9 @@ ON_APPLICATION_START() {
             if (SDUtils_AddAttachHandler(SDAttachedHandler) != SDUTILS_RESULT_SUCCESS) {
                 DEBUG_FUNCTION_LINE_ERR("Failed to add AttachedHandler");
             }
+            if (SDUtils_AddCleanUpHandlesHandler(SDCleanUpHandlesHandler) != SDUTILS_RESULT_SUCCESS) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to add CleanUpHandlesHandler");
+            }
             if (SDUtils_IsSdCardMounted(&sSDIsMounted) != SDUTILS_RESULT_SUCCESS) {
                 DEBUG_FUNCTION_LINE_ERR("IsSdCardMounted failed");
             }
@@ -145,6 +152,7 @@ ON_APPLICATION_ENDS() {
     gInWiiUMenu = false;
     if (sSDUtilsInitDone) {
         SDUtils_RemoveAttachHandler(SDAttachedHandler);
+        SDUtils_RemoveCleanUpHandlesHandler(SDCleanUpHandlesHandler);
         SDUtils_DeInit();
         sSDUtilsInitDone = false;
     }
