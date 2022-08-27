@@ -28,6 +28,8 @@
 #include <utils/logger.h>
 #include <wuhb_utils/utils.h>
 #include <wups.h>
+#include <wups/config/WUPSConfigItemBoolean.h>
+#include <wups/storage.h>
 
 typedef struct ACPMetaData {
     char bootmovie[80696];
@@ -56,6 +58,10 @@ std::forward_list<std::unique_ptr<FileReader>> openFileReaders;
 void readCustomTitlesFromSD();
 
 WUPS_USE_WUT_DEVOPTAB();
+WUPS_USE_STORAGE("homebrew_on_menu"); // Use the storage API
+
+bool gHideHomebrew = false;
+bool prevHideValue = false;
 
 INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
@@ -82,11 +88,81 @@ INITIALIZE_PLUGIN() {
         DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init RPXLoader. Error %d", error3);
         OSFatal("Homebrew on Menu Plugin: Failed to init RPXLoader.");
     }
+
+    // Open storage to read values
+    WUPSStorageError storageRes = WUPS_OpenStorage();
+    if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to open storage %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+    } else {
+        // Try to get value from storage
+        if ((storageRes = WUPS_GetBool(nullptr, "hideHomebrew", &gHideHomebrew)) == WUPS_STORAGE_ERROR_NOT_FOUND) {
+            // Add the value to the storage if it's missing.
+            storageRes = WUPS_StoreBool(nullptr, "hideHomebrew", gHideHomebrew);
+            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to store bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+            }
+        } else {
+            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to get bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+            }
+        }
+
+        prevHideValue = gHideHomebrew;
+
+        // Close storage
+        WUPS_CloseStorage();
+    }
+}
+
+void hideHomebrewChanged(ConfigItemBoolean *item, bool newValue) {
+    DEBUG_FUNCTION_LINE_VERBOSE("New value in gHideHomebrew: %d", newValue);
+    gHideHomebrew = newValue;
+    // If the value has changed, we store it in the storage.
+
+    WUPSStorageError storageRes = WUPS_StoreBool(nullptr, "hideHomebrew", gHideHomebrew);
+    if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to store bool: %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+    }
+}
+
+WUPS_GET_CONFIG() {
+    // We open the storage so we can persist the configuration the user did.
+    WUPSStorageError storageRes;
+    if ((storageRes = WUPS_OpenStorage()) != WUPS_STORAGE_ERROR_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to open storage %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+        return 0;
+    }
+
+    WUPSConfigHandle config;
+    WUPSConfig_CreateHandled(&config, "Homebrew on Menu");
+
+    WUPSConfigCategoryHandle cat;
+    WUPSConfig_AddCategoryByNameHandled(config, "Features", &cat);
+
+    WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, "hideHomebrew", "Hide all homebrew except Homebrew Launcher", gHideHomebrew, &hideHomebrewChanged);
+
+    return config;
 }
 
 bool sSDUtilsInitDone = false;
 bool sSDIsMounted     = false;
 bool sTitleRebooting  = false;
+
+WUPS_CONFIG_CLOSED() {
+    // Save all changes
+    WUPSStorageError storageRes;
+    if ((storageRes = WUPS_CloseStorage()) != WUPS_STORAGE_ERROR_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to close storage %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+    }
+
+    if (prevHideValue != gHideHomebrew) {
+        if (!sTitleRebooting) {
+            _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), nullptr);
+            sTitleRebooting = true;
+        }
+    }
+    prevHideValue = gHideHomebrew;
+}
 
 void Cleanup() {
     {
@@ -231,6 +307,11 @@ void readCustomTitlesFromSD() {
     dirList.SortList();
 
     for (int i = 0; i < dirList.GetFilecount(); i++) {
+        //! skip wiiload temp files
+        if (gHideHomebrew && strcasecmp(dirList.GetFilename(i), "homebrew_launcher.wuhb") != 0) {
+            continue;
+        }
+
         //! skip wiiload temp files
         if (strcasecmp(dirList.GetFilename(i), "temp.rpx") == 0) {
             continue;

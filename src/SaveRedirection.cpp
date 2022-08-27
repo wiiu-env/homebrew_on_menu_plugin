@@ -86,12 +86,12 @@ DECL_FUNCTION(int32_t, LoadConsoleAccount__Q2_2nn3actFUc13ACTLoadOptionPCcb, nn:
 
     return result;
 }
-
+extern bool gHideHomebrew;
 extern bool sSDIsMounted;
 DECL_FUNCTION(int32_t, SAVEInit) {
     auto res = real_SAVEInit();
     if (res >= 0) {
-        if (!sSDIsMounted) {
+        if (!sSDIsMounted || gHideHomebrew) {
             DEBUG_FUNCTION_LINE_VERBOSE("Skip SD redirection, no SD Card is mounted");
             return res;
         }
