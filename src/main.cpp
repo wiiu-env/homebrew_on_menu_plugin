@@ -78,7 +78,7 @@ INITIALIZE_PLUGIN() {
 
     // Use librpxloader.
     RPXLoaderStatus error3;
-    if ((error3 = RPXLoader_Init()) != RPX_LOADER_RESULT_SUCCESS) {
+    if ((error3 = RPXLoader_InitLibrary()) != RPX_LOADER_RESULT_SUCCESS) {
         DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init RPXLoader. Error %d", error3);
         OSFatal("Homebrew on Menu Plugin: Failed to init RPXLoader.");
     }
@@ -394,15 +394,17 @@ DECL_FUNCTION(int32_t, ACPCheckTitleLaunchByTitleListTypeEx, MCPTitleListType *t
 
             gHomebrewLaunched = TRUE;
 
-            RPXLoader_LoadFromSDOnNextLaunch(fileInfo.value()->relativeFilepath.c_str());
-            return 0;
+            if (RPXLoader_PrepareLaunchFromSD(fileInfo.value()->relativeFilepath.c_str()) == RPX_LOADER_RESULT_SUCCESS) {
+                return 0;
+            }
+
+            DEBUG_FUNCTION_LINE_ERR("Failed to prepare launch for %s", fileInfo.value()->relativeFilepath.c_str());
         } else {
             DEBUG_FUNCTION_LINE_ERR("Failed to get info for titleID %016llX", title->titleId);
         }
     }
 
-    int result = real_ACPCheckTitleLaunchByTitleListTypeEx(title, u2);
-    return result;
+    return real_ACPCheckTitleLaunchByTitleListTypeEx(title, u2);
 }
 
 
