@@ -70,22 +70,22 @@ INITIALIZE_PLUGIN() {
 
     // Use libwuhbutils.
     WUHBUtilsStatus error;
-    if ((error = WUHBUtils_Init()) != WUHB_UTILS_RESULT_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init WUHBUtils. Error %d", error);
+    if ((error = WUHBUtils_InitLibrary()) != WUHB_UTILS_RESULT_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init WUHBUtils. Error %s [%d]", WUHBUtils_GetStatusStr(error), error);
         OSFatal("Homebrew on Menu Plugin: Failed to init WUHBUtils.");
     }
 
     // Use libcontentredirection.
     ContentRedirectionStatus error2;
-    if ((error2 = ContentRedirection_Init()) != CONTENT_REDIRECTION_RESULT_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init ContentRedirection. Error %d", error2);
+    if ((error2 = ContentRedirection_InitLibrary()) != CONTENT_REDIRECTION_RESULT_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init ContentRedirection. Error %s [%d]", ContentRedirection_GetStatusStr(error2), error2);
         OSFatal("Homebrew on Menu Plugin: Failed to init ContentRedirection.");
     }
 
     // Use librpxloader.
     RPXLoaderStatus error3;
     if ((error3 = RPXLoader_InitLibrary()) != RPX_LOADER_RESULT_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init RPXLoader. Error %d", error3);
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init RPXLoader. Error %s [%d]", RPXLoader_GetStatusStr(error3), error3);
         OSFatal("Homebrew on Menu Plugin: Failed to init RPXLoader.");
     }
 
@@ -128,6 +128,7 @@ void hideHomebrewChanged(ConfigItemBoolean *item, bool newValue) {
 WUPS_GET_CONFIG() {
     // We open the storage so we can persist the configuration the user did.
     WUPSStorageError storageRes;
+    DEBUG_FUNCTION_LINE_ERR("In WUPS_GET_CONFIG");
     if ((storageRes = WUPS_OpenStorage()) != WUPS_STORAGE_ERROR_SUCCESS) {
         DEBUG_FUNCTION_LINE_ERR("Failed to open storage %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
         return 0;
@@ -196,8 +197,7 @@ ON_APPLICATION_START() {
         OSGetTitleID() == 0x0005001010040200L) { // Wii U Menu EUR
         gInWiiUMenu = true;
 
-        if (SDUtils_Init() >= 0) {
-            DEBUG_FUNCTION_LINE("SDUtils_Init done");
+        if (SDUtils_InitLibrary() == SDUTILS_RESULT_SUCCESS) {
             sSDUtilsInitDone = true;
             sTitleRebooting  = false;
             if (SDUtils_AddAttachHandler(SDAttachedHandler) != SDUTILS_RESULT_SUCCESS) {
@@ -210,7 +210,7 @@ ON_APPLICATION_START() {
                 DEBUG_FUNCTION_LINE_ERR("IsSdCardMounted failed");
             }
         } else {
-            DEBUG_FUNCTION_LINE_ERR("Failed to init SDUtils. Make sure to have the SDHotSwapModule loaded!");
+            DEBUG_FUNCTION_LINE_WARN("Failed to init SDUtils. Make sure to have the SDHotSwapModule loaded!");
         }
     } else {
         gInWiiUMenu = false;
@@ -229,7 +229,7 @@ ON_APPLICATION_ENDS() {
     if (sSDUtilsInitDone) {
         SDUtils_RemoveAttachHandler(SDAttachedHandler);
         SDUtils_RemoveCleanUpHandlesHandler(SDCleanUpHandlesHandler);
-        SDUtils_DeInit();
+        SDUtils_DeInitLibrary();
         sSDUtilsInitDone = false;
     }
     sSDIsMounted = false;
