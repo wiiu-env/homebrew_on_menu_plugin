@@ -451,12 +451,14 @@ DECL_FUNCTION(int32_t, MCP_TitleList, uint32_t handle, uint32_t *outTitleCount, 
 
     uint32_t titleCount = *outTitleCount;
 
-    std::lock_guard<std::mutex> lock(fileInfosMutex);
-    readCustomTitlesFromSD();
+    {
+        std::lock_guard<std::mutex> lock(fileInfosMutex);
+        readCustomTitlesFromSD();
 
-    for (auto &gFileInfo : fileInfos) {
-        memcpy(&(titleList[titleCount]), &(gFileInfo->titleInfo), sizeof(MCPTitleListType));
-        titleCount++;
+        for (auto &gFileInfo : fileInfos) {
+            memcpy(&(titleList[titleCount]), &(gFileInfo->titleInfo), sizeof(MCPTitleListType));
+            titleCount++;
+        }
     }
 
     *outTitleCount = titleCount;
@@ -540,10 +542,12 @@ DECL_FUNCTION(FSStatus, FSCloseFile, FSClient *client, FSCmdBlock *block, FSFile
 }
 
 DECL_FUNCTION(FSStatus, FSReadFile, FSClient *client, FSCmdBlock *block, uint8_t *buffer, uint32_t size, uint32_t count, FSFileHandle handle, uint32_t unk1, uint32_t flags) {
-    const std::lock_guard<std::mutex> lock(fileReaderListMutex);
-    for (auto &reader : openFileReaders) {
-        if ((uint32_t) reader.get() == (uint32_t) handle) {
-            return (FSStatus) (reader->read(buffer, size * count) / size);
+    {
+        const std::lock_guard<std::mutex> lock(fileReaderListMutex);
+        for (auto &reader : openFileReaders) {
+            if ((uint32_t) reader.get() == (uint32_t) handle) {
+                return (FSStatus) (reader->read(buffer, size * count) / size);
+            }
         }
     }
     FSStatus result = real_FSReadFile(client, block, buffer, size, count, handle, unk1, flags);
