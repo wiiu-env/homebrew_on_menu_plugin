@@ -1,6 +1,10 @@
 [![CI-Release](https://github.com/wiiu-env/homebrew_on_menu_plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/wiiu-env/homebrew_on_menu_plugin/actions/workflows/ci.yml)
 
-## Usage
+# Homebrew on menu
+
+This plugin allows you to boot homebrew directly from your Wii U Menu.
+
+## Installation
 (`[ENVIRONMENT]` is a placeholder for the actual environment name.)
 
 1. Copy the file `homebrew_on_menu.wps` into `sd:/wiiu/environments/[ENVIRONMENT]/plugins`.  
@@ -10,9 +14,21 @@
 5. Requires the [ContentRedirectionModule](https://github.com/wiiu-env/ContentRedirectionModule) in `sd:/wiiu/environments/[ENVIRONMENT]/modules`.
 6. Requires the [SDHotSwapModule](https://github.com/wiiu-env/SDHotSwapModule) in `sd:/wiiu/environments/[ENVIRONMENT]/modules`.
 
+## Usage
+
+Place your homebrew (`.rpx` or `.wuhb`) in `sd:/wiiu/apps` or any subdirectory inside `sd:/wiiu/apps`.
+
+Via the plugin config menu (press L, DPAD Down and Minus on the gamepad) you can configure the plugin. The available options are the following:
+- **Features**:
+  - Hide all homebrew except Homebrew Launcher:  (Default is false)
+    - Hides all homebrew from the Wii U Menu except the `sd:/wiiu/apps/homebrew_launcher.wuhb` and `sd:/wiiu/apps/homebrew_launcher/homebrew_launcher.wuhb`
+  - Prefer .wuhb over .rpx (Default is true)
+    - Hides a `.rpx` from the Wii U Menu if a `.wuhb` with the same name exists in the same directory.
 ## Save data redirection
 In order to preserve the order of homebrew apps even when you run the Wii U Menu without this plugin, this plugin will redirect the Wii U Menu save data to `sd:/wiiu/homebrew_on_menu_plugin`. 
 When no save data is found on the sd card, the current save data is copied from the console, but after that it's never updated.
+
+**If the plugin is configured to hide any homebrew except a Homebrew Launcher, the redirection is disabled.**
 
 ## Buildflags
 

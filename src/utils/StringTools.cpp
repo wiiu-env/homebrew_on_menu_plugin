@@ -30,6 +30,19 @@
 #include <utils/StringTools.h>
 #include <wut_types.h>
 
+std::string StringTools::remove_extension(const std::string &filename) {
+    size_t lastdot = filename.find_last_of('.');
+    if (lastdot == std::string::npos) return filename;
+    return filename.substr(0, lastdot);
+}
+
+std::string StringTools::get_extension(const std::string &filename) {
+    size_t lastdot = filename.find_last_of('.');
+    if (lastdot == std::string::npos) return "";
+    return filename.substr(lastdot);
+}
+
+
 int32_t StringTools::strtokcmp(const char *string, const char *compare, const char *separator) {
     if (!string || !compare)
         return -1;
