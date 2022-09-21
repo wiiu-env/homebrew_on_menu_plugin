@@ -19,6 +19,7 @@
 #include <forward_list>
 #include <fs/DirList.h>
 #include <malloc.h>
+#include <map>
 #include <mutex>
 #include <nn/acp.h>
 #include <optional>
@@ -61,8 +62,20 @@ void readCustomTitlesFromSD();
 WUPS_USE_WUT_DEVOPTAB();
 WUPS_USE_STORAGE("homebrew_on_menu"); // Use the storage API
 
-bool gHideHomebrew = false;
-bool prevHideValue = false;
+#define HIDE_HOMEBREW_STRING                 "hideHomebrew"
+#define PREFER_WUHB_OVER_RPX_STRING          "hideRPXIfWUHBExists"
+
+#define HOMEBREW_APPS_DIRECTORY              "fs:/vol/external01/wiiu/apps"
+#define HOMEBREW_LAUNCHER_FILENAME           "homebrew_launcher.wuhb"
+#define HOMEBREW_LAUNCHER_OPTIONAL_DIRECTORY "homebrew_launcher"
+
+#define HOMEBREW_LAUNCHER_PATH               HOMEBREW_APPS_DIRECTORY "/" HOMEBREW_LAUNCHER_FILENAME
+#define HOMEBREW_LAUNCHER_PATH2              HOMEBREW_APPS_DIRECTORY "/" HOMEBREW_LAUNCHER_OPTIONAL_DIRECTORY "/" HOMEBREW_LAUNCHER_FILENAME
+
+bool gHideHomebrew              = false;
+bool gPreferWUHBOverRPX         = true;
+bool prevHideValue              = false;
+bool prevPreferWUHBOverRPXValue = false;
 
 INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
@@ -96,9 +109,9 @@ INITIALIZE_PLUGIN() {
         DEBUG_FUNCTION_LINE_ERR("Failed to open storage %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
     } else {
         // Try to get value from storage
-        if ((storageRes = WUPS_GetBool(nullptr, "hideHomebrew", &gHideHomebrew)) == WUPS_STORAGE_ERROR_NOT_FOUND) {
+        if ((storageRes = WUPS_GetBool(nullptr, HIDE_HOMEBREW_STRING, &gHideHomebrew)) == WUPS_STORAGE_ERROR_NOT_FOUND) {
             // Add the value to the storage if it's missing.
-            storageRes = WUPS_StoreBool(nullptr, "hideHomebrew", gHideHomebrew);
+            storageRes = WUPS_StoreBool(nullptr, HIDE_HOMEBREW_STRING, gHideHomebrew);
             if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
                 DEBUG_FUNCTION_LINE_ERR("Failed to store bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
             }
@@ -108,7 +121,20 @@ INITIALIZE_PLUGIN() {
             }
         }
 
-        prevHideValue = gHideHomebrew;
+        if ((storageRes = WUPS_GetBool(nullptr, PREFER_WUHB_OVER_RPX_STRING, &gPreferWUHBOverRPX)) == WUPS_STORAGE_ERROR_NOT_FOUND) {
+            // Add the value to the storage if it's missing.
+            storageRes = WUPS_StoreBool(nullptr, PREFER_WUHB_OVER_RPX_STRING, gPreferWUHBOverRPX);
+            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to store bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+            }
+        } else {
+            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to get bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+            }
+        }
+
+        prevHideValue              = gHideHomebrew;
+        prevPreferWUHBOverRPXValue = gPreferWUHBOverRPX;
 
         // Close storage
         WUPS_CloseStorage();
@@ -118,9 +144,20 @@ INITIALIZE_PLUGIN() {
 void hideHomebrewChanged(ConfigItemBoolean *item, bool newValue) {
     DEBUG_FUNCTION_LINE_VERBOSE("New value in gHideHomebrew: %d", newValue);
     gHideHomebrew = newValue;
-    // If the value has changed, we store it in the storage.
 
-    WUPSStorageError storageRes = WUPS_StoreBool(nullptr, "hideHomebrew", gHideHomebrew);
+    // If the value has changed, we store it in the storage.
+    WUPSStorageError storageRes = WUPS_StoreBool(nullptr, HIDE_HOMEBREW_STRING, gHideHomebrew);
+    if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to store bool: %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+    }
+}
+
+void preferWUHBOverRPXChanged(ConfigItemBoolean *item, bool newValue) {
+    DEBUG_FUNCTION_LINE_VERBOSE("New value in gPreferWUHBOverRPX: %d", newValue);
+    gPreferWUHBOverRPX = newValue;
+
+    // If the value has changed, we store it in the storage.
+    WUPSStorageError storageRes = WUPS_StoreBool(nullptr, PREFER_WUHB_OVER_RPX_STRING, gPreferWUHBOverRPX);
     if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
         DEBUG_FUNCTION_LINE_ERR("Failed to store bool: %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
     }
@@ -141,7 +178,8 @@ WUPS_GET_CONFIG() {
     WUPSConfigCategoryHandle cat;
     WUPSConfig_AddCategoryByNameHandled(config, "Features", &cat);
 
-    WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, "hideHomebrew", "Hide all homebrew except Homebrew Launcher", gHideHomebrew, &hideHomebrewChanged);
+    WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, HIDE_HOMEBREW_STRING, "Hide all homebrew except Homebrew Launcher", gHideHomebrew, &hideHomebrewChanged);
+    WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, PREFER_WUHB_OVER_RPX_STRING, "Prefer .wuhb over .rpx", gPreferWUHBOverRPX, &preferWUHBOverRPXChanged);
 
     return config;
 }
@@ -157,13 +195,14 @@ WUPS_CONFIG_CLOSED() {
         DEBUG_FUNCTION_LINE_ERR("Failed to close storage %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
     }
 
-    if (prevHideValue != gHideHomebrew) {
+    if (prevHideValue != gHideHomebrew || prevPreferWUHBOverRPXValue != gPreferWUHBOverRPX) {
         if (!sTitleRebooting) {
             _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), nullptr);
             sTitleRebooting = true;
         }
     }
-    prevHideValue = gHideHomebrew;
+    prevHideValue              = gHideHomebrew;
+    prevPreferWUHBOverRPXValue = gPreferWUHBOverRPX;
 }
 
 void Cleanup() {
@@ -303,42 +342,74 @@ void readCustomTitlesFromSD() {
         DEBUG_FUNCTION_LINE_VERBOSE("Using cached value");
         return;
     }
-    // Reset current infos
-    DirList dirList("fs:/vol/external01/wiiu/apps", ".rpx,.wuhb", DirList::Files | DirList::CheckSubfolders, 1);
-    dirList.SortList();
 
-    for (int i = 0; i < dirList.GetFilecount(); i++) {
+    std::vector<std::string> listOfExecutables;
+
+    if (gHideHomebrew) {
+        struct stat st {};
+        if (stat(HOMEBREW_LAUNCHER_PATH, &st) >= 0) {
+            listOfExecutables.emplace_back(HOMEBREW_LAUNCHER_PATH);
+        } else if (stat(HOMEBREW_LAUNCHER_PATH2, &st) >= 0) {
+            listOfExecutables.emplace_back(HOMEBREW_LAUNCHER_PATH2);
+        }
+    } else {
+        // Reset current infos
+        DirList dirList(HOMEBREW_APPS_DIRECTORY, ".rpx,.wuhb", DirList::Files | DirList::CheckSubfolders, 1);
+        dirList.SortList();
+
+        if (gPreferWUHBOverRPX) {
+            // map<[path without extension], vector<[extension]>>
+            std::map<std::string, std::vector<std::string>> pathWithoutExtensionMap;
+            for (int i = 0; i < dirList.GetFilecount(); i++) {
+                std::string pathNoExtension = StringTools::remove_extension(dirList.GetFilepath(i));
+                if (pathWithoutExtensionMap.count(pathNoExtension) == 0) {
+                    pathWithoutExtensionMap[pathNoExtension] = std::vector<std::string>();
+                }
+                pathWithoutExtensionMap[pathNoExtension].push_back(StringTools::get_extension(dirList.GetFilename(i)));
+            }
+
+            for (auto &l : pathWithoutExtensionMap) {
+                if (l.second.size() == 1 && l.second.at(0) == ".rpx") {
+                    listOfExecutables.push_back(l.first + ".rpx");
+                } else {
+                    listOfExecutables.push_back(l.first + ".wuhb");
+                }
+            }
+        } else {
+            for (int i = 0; i < dirList.GetFilecount(); i++) {
+                listOfExecutables.emplace_back(dirList.GetFilepath(i));
+            }
+        }
+    }
+
+    for (auto &filePath : listOfExecutables) {
+        auto filename = StringTools::FullpathToFilename(filePath.c_str());
+
         //! skip wiiload temp files
-        if (gHideHomebrew && strcasecmp(dirList.GetFilename(i), "homebrew_launcher.wuhb") != 0) {
+        if (strcasecmp(filename, "temp.rpx") == 0) {
             continue;
         }
 
         //! skip wiiload temp files
-        if (strcasecmp(dirList.GetFilename(i), "temp.rpx") == 0) {
+        if (strcasecmp(filename, "temp.wuhb") == 0) {
             continue;
         }
 
         //! skip wiiload temp files
-        if (strcasecmp(dirList.GetFilename(i), "temp.wuhb") == 0) {
-            continue;
-        }
-
-        //! skip wiiload temp files
-        if (strcasecmp(dirList.GetFilename(i), "temp2.wuhb") == 0) {
+        if (strcasecmp(filename, "temp2.wuhb") == 0) {
             continue;
         }
 
         //! skip hidden linux and mac files
-        if (dirList.GetFilename(i)[0] == '.' || dirList.GetFilename(i)[0] == '_') {
+        if (filename[0] == '.' || filename[0] == '_') {
             continue;
         }
 
-
         auto repl  = "fs:/vol/external01/";
-        auto input = dirList.GetFilepath(i);
+        auto input = filePath.c_str();
         const char *relativeFilepath;
 
-        if (std::string_view(input).starts_with(repl)) {
+        if (filePath.starts_with(repl)) {
             relativeFilepath = &input[strlen(repl)];
         } else {
             DEBUG_FUNCTION_LINE_ERR("Skip %s, Path doesn't start with %s (This should never happen", input, repl);
@@ -360,10 +431,10 @@ void readCustomTitlesFromSD() {
         const char *indexedDevice = "mlc";
         strncpy(cur_title_info->indexedDevice, indexedDevice, sizeof(cur_title_info->indexedDevice) - 1);
 
-        fileInfo->filename  = dirList.GetFilename(i);
-        fileInfo->longname  = dirList.GetFilename(i);
-        fileInfo->shortname = dirList.GetFilename(i);
-        fileInfo->author    = dirList.GetFilename(i);
+        fileInfo->filename  = filename;
+        fileInfo->longname  = filename;
+        fileInfo->shortname = filename;
+        fileInfo->author    = filename;
 
         // System apps don't have a splash screen.
         cur_title_info->appType = MCP_APP_TYPE_SYSTEM_APPS;
@@ -376,7 +447,7 @@ void readCustomTitlesFromSD() {
 
 #define TMP_BUNDLE_NAME "romfscheck"
 
-            if (WUHBUtils_MountBundle(TMP_BUNDLE_NAME, dirList.GetFilepath(i), BundleSource_FileDescriptor, &result) == WUHB_UTILS_RESULT_SUCCESS && result >= 0) {
+            if (WUHBUtils_MountBundle(TMP_BUNDLE_NAME, filePath.c_str(), BundleSource_FileDescriptor, &result) == WUHB_UTILS_RESULT_SUCCESS && result >= 0) {
                 fileInfo->isBundle = true;
                 uint8_t *buffer;
                 uint32_t bufferSize;
@@ -410,7 +481,7 @@ void readCustomTitlesFromSD() {
                     DEBUG_FUNCTION_LINE_ERR("Failed to unmount \"%s\"", TMP_BUNDLE_NAME);
                 }
             } else {
-                DEBUG_FUNCTION_LINE_ERR("%s is not a valid .wuhb file: %d", dirList.GetFilepath(i), result);
+                DEBUG_FUNCTION_LINE_ERR("%s is not a valid .wuhb file: %d", filePath.c_str(), result);
                 continue;
             }
         }
@@ -425,6 +496,7 @@ void readCustomTitlesFromSD() {
 
         fileInfos.push_front(fileInfo);
     }
+    OSMemoryBarrier();
 }
 
 bool CheckFileExistsHelper(const char *path) {

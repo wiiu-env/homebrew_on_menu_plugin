@@ -40,6 +40,10 @@ std::string string_format(const std::string &format, Args... args) {
 
 class StringTools {
 public:
+    static std::string remove_extension(const std::string &filename);
+
+    static std::string get_extension(const std::string &filename);
+
     static int32_t strtokcmp(const char *string, const char *compare, const char *separator);
 
     static const char *FullpathToFilename(const char *path);
