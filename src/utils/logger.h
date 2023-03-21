@@ -36,6 +36,7 @@ extern "C" {
 
 #define DEBUG_FUNCTION_LINE_ERR(FMT, ARGS...)   LOG_EX(WHBLogPrintf, "##ERROR## ", "", FMT, ##ARGS)
 #define DEBUG_FUNCTION_LINE_WARN(FMT, ARGS...)  LOG_EX(WHBLogPrintf, "##WARN ## ", "", FMT, ##ARGS)
+#define DEBUG_FUNCTION_LINE_INFO(FMT, ARGS...)  LOG_EX(WHBLogPrintf, "##INFO ## ", "", FMT, ##ARGS)
 
 #else
 
@@ -47,6 +48,7 @@ extern "C" {
 
 #define DEBUG_FUNCTION_LINE_ERR(FMT, ARGS...)     LOG_EX(OSReport, "##ERROR## ", "\n", FMT, ##ARGS)
 #define DEBUG_FUNCTION_LINE_WARN(FMT, ARGS...)    LOG_EX(OSReport, "##WARN ## ", "\n", FMT, ##ARGS)
+#define DEBUG_FUNCTION_LINE_INFO(FMT, ARGS...)    LOG_EX(OSReport, "##INFO ## ", "\n", FMT, ##ARGS)
 
 #endif
 
