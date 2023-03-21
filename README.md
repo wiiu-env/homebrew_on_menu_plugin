@@ -24,6 +24,9 @@ Via the plugin config menu (press L, DPAD Down and Minus on the gamepad) you can
     - Hides all homebrew from the Wii U Menu except the `sd:/wiiu/apps/homebrew_launcher.wuhb` and `sd:/wiiu/apps/homebrew_launcher/homebrew_launcher.wuhb`
   - Prefer .wuhb over .rpx (Default is true)
     - Hides a `.rpx` from the Wii U Menu if a `.wuhb` with the same name exists in the same directory.
+  - Hide all .rpx (Default is false)
+    - Hides all `.rpx` from the Wii U Menu.
+
 ## Save data redirection
 In order to preserve the order of homebrew apps even when you run the Wii U Menu without this plugin, this plugin will redirect the Wii U Menu save data to `sd:/wiiu/homebrew_on_menu_plugin`. 
 When no save data is found on the sd card, the current save data is copied from the console, but after that it's never updated.
