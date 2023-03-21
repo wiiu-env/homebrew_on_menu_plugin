@@ -80,6 +80,8 @@ bool prevHideValue              = false;
 bool prevPreferWUHBOverRPXValue = false;
 bool prevHideAllRPX             = false;
 
+bool gHomebrewLauncherExists = false;
+
 INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
     memset((void *) &gLaunchXML, 0, sizeof(gLaunchXML));
@@ -205,7 +207,10 @@ WUPS_GET_CONFIG() {
     WUPSConfigCategoryHandle cat;
     WUPSConfig_AddCategoryByNameHandled(config, "Features", &cat);
 
-    WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, HIDE_HOMEBREW_STRING, "Hide all homebrew except Homebrew Launcher", gHideHomebrew, &hideHomebrewChanged);
+    WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, HIDE_HOMEBREW_STRING,
+                                               gHomebrewLauncherExists ? "Hide all homebrew except Homebrew Launcher" : "Hide all homebrew",
+                                               gHideHomebrew, &hideHomebrewChanged);
+
     WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, PREFER_WUHB_OVER_RPX_STRING, "Prefer .wuhb over .rpx", gPreferWUHBOverRPX, &preferWUHBOverRPXChanged);
     WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, HIDE_ALL_RPX_STRING, "Hide all .rpx", gHideAllRPX, &hideAllRPXChanged);
 
@@ -265,6 +270,13 @@ ON_APPLICATION_START() {
         OSGetTitleID() == 0x0005001010040100L || // Wii U Menu USA
         OSGetTitleID() == 0x0005001010040200L) { // Wii U Menu EUR
         gInWiiUMenu = true;
+
+        struct stat st {};
+        if (stat(HOMEBREW_LAUNCHER_PATH, &st) >= 0 || stat(HOMEBREW_LAUNCHER_PATH2, &st) >= 0) {
+            gHomebrewLauncherExists = true;
+        } else {
+            gHomebrewLauncherExists = false;
+        }
 
         if (SDUtils_InitLibrary() == SDUTILS_RESULT_SUCCESS) {
             sSDUtilsInitDone = true;
