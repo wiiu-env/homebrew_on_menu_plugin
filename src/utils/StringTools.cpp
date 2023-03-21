@@ -91,3 +91,26 @@ void StringTools::RemoveDoubleSlashs(std::string &str) {
         }
     }
 }
+
+std::vector<std::string> StringTools::StringSplit(const std::string &inValue, const std::string &splitter) {
+    std::string value = inValue;
+    std::vector<std::string> result;
+    while (true) {
+        unsigned int index = value.find(splitter);
+        if (index == std::string::npos) {
+            result.push_back(value);
+            break;
+        }
+        std::string first = value.substr(0, index);
+        result.push_back(first);
+        if (index + splitter.size() == value.length()) {
+            result.push_back("");
+            break;
+        }
+        if (index + splitter.size() > value.length()) {
+            break;
+        }
+        value = value.substr(index + splitter.size(), value.length());
+    }
+    return result;
+}

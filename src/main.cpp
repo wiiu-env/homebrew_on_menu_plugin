@@ -2,11 +2,13 @@
 #include "FileInfos.h"
 #include "SaveRedirection.h"
 #include "filelist.h"
+#include "fs/CFile.hpp"
 #include "fs/FSUtils.h"
 #include "fs/FileReader.h"
 #include "fs/FileReaderWUHB.h"
 #include "utils/StringTools.h"
 #include "utils/ini.h"
+#include <algorithm>
 #include <content_redirection/redirection.h>
 #include <coreinit/cache.h>
 #include <coreinit/debug.h>
@@ -16,6 +18,7 @@
 #include <coreinit/systeminfo.h>
 #include <coreinit/title.h>
 #include <cstring>
+#include <fnmatch.h>
 #include <forward_list>
 #include <fs/DirList.h>
 #include <malloc.h>
@@ -67,6 +70,7 @@ WUPS_USE_STORAGE("homebrew_on_menu"); // Use the storage API
 #define HIDE_ALL_RPX_STRING                  "hideAllRPX"
 
 #define HOMEBREW_APPS_DIRECTORY              "fs:/vol/external01/wiiu/apps"
+#define IGNORE_FILE_PATH                     HOMEBREW_APPS_DIRECTORY "/.ignore"
 #define HOMEBREW_LAUNCHER_FILENAME           "homebrew_launcher.wuhb"
 #define HOMEBREW_LAUNCHER_OPTIONAL_DIRECTORY "homebrew_launcher"
 
@@ -81,6 +85,8 @@ bool prevPreferWUHBOverRPXValue = false;
 bool prevHideAllRPX             = false;
 
 bool gHomebrewLauncherExists = false;
+
+std::vector<std::string> gIgnorePatterns;
 
 INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
@@ -266,6 +272,32 @@ ON_APPLICATION_START() {
     initLogging();
     sSDIsMounted = false;
 
+    CFile file(IGNORE_FILE_PATH, CFile::ReadOnly);
+    if (file.isOpen()) {
+        std::string strBuffer;
+        strBuffer.resize(file.size());
+        file.read((uint8_t *) &strBuffer[0], strBuffer.size());
+        file.close();
+
+        //! remove all windows crap signs
+        size_t position;
+        while (true) {
+            position = strBuffer.find('\r');
+            if (position == std::string::npos) {
+                break;
+            }
+
+            strBuffer.erase(position, 1);
+        }
+
+        gIgnorePatterns = StringTools::StringSplit(strBuffer, "\n");
+
+        // Ignore all lines that start with '#'
+        gIgnorePatterns.erase(std::remove_if(gIgnorePatterns.begin(), gIgnorePatterns.end(), [](auto &line) { return line.starts_with('#'); }), gIgnorePatterns.end());
+    } else {
+        DEBUG_FUNCTION_LINE_ERR("No ignore found");
+    }
+
     if (OSGetTitleID() == 0x0005001010040000L || // Wii U Menu JPN
         OSGetTitleID() == 0x0005001010040100L || // Wii U Menu USA
         OSGetTitleID() == 0x0005001010040200L) { // Wii U Menu EUR
@@ -427,6 +459,20 @@ void readCustomTitlesFromSD() {
                 listOfExecutables.emplace_back(dirList.GetFilepath(i));
             }
         }
+
+        // Remove any executable that matches the ignore pattern.
+        listOfExecutables.erase(std::remove_if(listOfExecutables.begin(), listOfExecutables.end(), [&](const auto &item) {
+                                    auto path = item.substr(strlen(HOMEBREW_APPS_DIRECTORY) + 1);
+                                    return std::ranges::any_of(gIgnorePatterns.begin(), gIgnorePatterns.end(),
+                                                               [&](const auto &pattern) {
+                                                                   if (fnmatch(pattern.c_str(), path.c_str(), FNM_CASEFOLD) == 0) {
+                                                                       DEBUG_FUNCTION_LINE_INFO("Ignore \"%s\" because it matched pattern \"%s\"", path.c_str(), pattern.c_str());
+                                                                       return true;
+                                                                   }
+                                                                   return false;
+                                                               });
+                                }),
+                                listOfExecutables.end());
     }
 
     for (auto &filePath : listOfExecutables) {

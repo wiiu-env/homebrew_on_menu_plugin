@@ -49,4 +49,6 @@ public:
     static const char *FullpathToFilename(const char *path);
 
     static void RemoveDoubleSlashs(std::string &str);
+
+    static std::vector<std::string> StringSplit(const std::string &inValue, const std::string &splitter);
 };

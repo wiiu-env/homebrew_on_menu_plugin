@@ -28,6 +28,24 @@ Via the plugin config menu (press L, DPAD Down and Minus on the gamepad) you can
   - Hide all .rpx (Default is false)
     - Hides all `.rpx` from the Wii U Menu.
 
+## Hide specific apps
+
+A list of executables to hide can be provided via `sd:/wiiu/apps/.ignore`. This file is a text file, each line contains a file/pattern to exclude. 
+Every line is considered case-insensitive and relative to `sd:/wiiu/apps/`. Lines starting with "#" will be ignored and can be used for comments. `*` is supported as a wildcard.
+
+Example:
+```
+# Ignore any .rpx in the my_game sub directory
+my_game/*.rpx
+# Ignore any executable in the other_game sub directory
+other_game/*
+# Ignore any executable that starts with "retroarch"
+retroarch*
+*/retroarch*
+# Ignore sd:/wiiu/apps/CoolGame.wuhb
+CoolGame.wuhb
+```
+
 ## Save data redirection
 In order to preserve the order of homebrew apps even when you run the Wii U Menu without this plugin, this plugin will redirect the Wii U Menu save data to `sd:/wiiu/homebrew_on_menu_plugin`. 
 When no save data is found on the sd card, the current save data is copied from the console, but after that it's never updated.
