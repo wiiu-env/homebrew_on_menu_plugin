@@ -20,8 +20,9 @@ Place your homebrew (`.rpx` or `.wuhb`) in `sd:/wiiu/apps` or any subdirectory i
 
 Via the plugin config menu (press L, DPAD Down and Minus on the gamepad) you can configure the plugin. The available options are the following:
 - **Features**:
-  - Hide all homebrew except Homebrew Launcher:  (Default is false)
+  - Hide all homebrew [except Homebrew Launcher]:  (Default is false)
     - Hides all homebrew from the Wii U Menu except the `sd:/wiiu/apps/homebrew_launcher.wuhb` and `sd:/wiiu/apps/homebrew_launcher/homebrew_launcher.wuhb`
+    - This config item is called "Hide all homebrew" when no `homebrew_launcher.wuhb` is present.
   - Prefer .wuhb over .rpx (Default is true)
     - Hides a `.rpx` from the Wii U Menu if a `.wuhb` with the same name exists in the same directory.
   - Hide all .rpx (Default is false)
