@@ -14,6 +14,7 @@
 #include <coreinit/debug.h>
 #include <coreinit/filesystem.h>
 #include <coreinit/mcp.h>
+#include <coreinit/memory.h>
 #include <coreinit/mutex.h>
 #include <coreinit/systeminfo.h>
 #include <coreinit/title.h>
@@ -261,7 +262,7 @@ void SDCleanUpHandlesHandler() {
 }
 
 void SDAttachedHandler([[maybe_unused]] SDUtilsAttachStatus status) {
-    if (!sTitleRebooting) {
+    if (OSGetForegroundBucket(nullptr, nullptr) && !sTitleRebooting) {
         _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), nullptr);
         sTitleRebooting = true;
     }
