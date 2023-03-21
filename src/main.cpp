@@ -64,6 +64,7 @@ WUPS_USE_STORAGE("homebrew_on_menu"); // Use the storage API
 
 #define HIDE_HOMEBREW_STRING                 "hideHomebrew"
 #define PREFER_WUHB_OVER_RPX_STRING          "hideRPXIfWUHBExists"
+#define HIDE_ALL_RPX_STRING                  "hideAllRPX"
 
 #define HOMEBREW_APPS_DIRECTORY              "fs:/vol/external01/wiiu/apps"
 #define HOMEBREW_LAUNCHER_FILENAME           "homebrew_launcher.wuhb"
@@ -74,8 +75,10 @@ WUPS_USE_STORAGE("homebrew_on_menu"); // Use the storage API
 
 bool gHideHomebrew              = false;
 bool gPreferWUHBOverRPX         = true;
+bool gHideAllRPX                = false;
 bool prevHideValue              = false;
 bool prevPreferWUHBOverRPXValue = false;
+bool prevHideAllRPX             = false;
 
 INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
@@ -133,8 +136,21 @@ INITIALIZE_PLUGIN() {
             }
         }
 
+        if ((storageRes = WUPS_GetBool(nullptr, HIDE_ALL_RPX_STRING, &gHideAllRPX)) == WUPS_STORAGE_ERROR_NOT_FOUND) {
+            // Add the value to the storage if it's missing.
+            storageRes = WUPS_StoreBool(nullptr, HIDE_ALL_RPX_STRING, gHideAllRPX);
+            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to store bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+            }
+        } else {
+            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to get bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+            }
+        }
+
         prevHideValue              = gHideHomebrew;
         prevPreferWUHBOverRPXValue = gPreferWUHBOverRPX;
+        prevHideAllRPX             = gHideAllRPX;
 
         // Close storage
         WUPS_CloseStorage();
@@ -163,6 +179,17 @@ void preferWUHBOverRPXChanged(ConfigItemBoolean *item, bool newValue) {
     }
 }
 
+void hideAllRPXChanged(ConfigItemBoolean *item, bool newValue) {
+    DEBUG_FUNCTION_LINE_VERBOSE("New value in gHideAllRPX: %d", newValue);
+    gHideAllRPX = newValue;
+
+    // If the value has changed, we store it in the storage.
+    WUPSStorageError storageRes = WUPS_StoreBool(nullptr, HIDE_ALL_RPX_STRING, gHideAllRPX);
+    if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to store bool: %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+    }
+}
+
 WUPS_GET_CONFIG() {
     // We open the storage so we can persist the configuration the user did.
     WUPSStorageError storageRes;
@@ -180,6 +207,7 @@ WUPS_GET_CONFIG() {
 
     WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, HIDE_HOMEBREW_STRING, "Hide all homebrew except Homebrew Launcher", gHideHomebrew, &hideHomebrewChanged);
     WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, PREFER_WUHB_OVER_RPX_STRING, "Prefer .wuhb over .rpx", gPreferWUHBOverRPX, &preferWUHBOverRPXChanged);
+    WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, HIDE_ALL_RPX_STRING, "Hide all .rpx", gHideAllRPX, &hideAllRPXChanged);
 
     return config;
 }
@@ -195,7 +223,7 @@ WUPS_CONFIG_CLOSED() {
         DEBUG_FUNCTION_LINE_ERR("Failed to close storage %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
     }
 
-    if (prevHideValue != gHideHomebrew || prevPreferWUHBOverRPXValue != gPreferWUHBOverRPX) {
+    if (prevHideValue != gHideHomebrew || prevPreferWUHBOverRPXValue != gPreferWUHBOverRPX || prevHideAllRPX != gHideAllRPX) {
         if (!sTitleRebooting) {
             _SYSLaunchTitleWithStdArgsInNoSplash(OSGetTitleID(), nullptr);
             sTitleRebooting = true;
@@ -203,6 +231,7 @@ WUPS_CONFIG_CLOSED() {
     }
     prevHideValue              = gHideHomebrew;
     prevPreferWUHBOverRPXValue = gPreferWUHBOverRPX;
+    prevHideAllRPX             = gHideAllRPX;
 }
 
 void Cleanup() {
@@ -357,7 +386,13 @@ void readCustomTitlesFromSD() {
         DirList dirList(HOMEBREW_APPS_DIRECTORY, ".rpx,.wuhb", DirList::Files | DirList::CheckSubfolders, 1);
         dirList.SortList();
 
-        if (gPreferWUHBOverRPX) {
+        if (gHideAllRPX) {
+            for (int i = 0; i < dirList.GetFilecount(); i++) {
+                if (dirList.GetFilepath(i) != nullptr && !std::string_view(dirList.GetFilepath(i)).ends_with(".rpx")) {
+                    listOfExecutables.emplace_back(dirList.GetFilepath(i));
+                }
+            }
+        } else if (gPreferWUHBOverRPX) {
             // map<[path without extension], vector<[extension]>>
             std::map<std::string, std::vector<std::string>> pathWithoutExtensionMap;
             for (int i = 0; i < dirList.GetFilecount(); i++) {
