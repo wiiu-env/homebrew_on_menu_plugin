@@ -86,6 +86,26 @@ DECL_FUNCTION(int32_t, LoadConsoleAccount__Q2_2nn3actFUc13ACTLoadOptionPCcb, nn:
 
     return result;
 }
+
+DECL_FUNCTION(SAVEStatus, SAVEGetSharedSaveDataPath, uint64_t titleID, const char *path, char *buffer, uint32_t bufferSize) {
+    if (titleID == 0x0005001010040000L || // Wii U Menu JPN
+        titleID == 0x0005001010040100L || // Wii U Menu USA
+        titleID == 0x0005001010040200L) { // Wii U Menu EUR
+        if (buffer != nullptr) {
+            std::string commonReplacement = SAVE_REPLACEMENT_PATH "/save/common";
+            auto BaristaCommonSaveFile    = "fs:" + commonReplacement + "/BaristaCommonSaveFile.dat";
+            auto BaristaIconDataBase      = "fs:" + commonReplacement + "/BaristaIconDataBase.dat";
+            if (FSUtils::CheckFile(BaristaCommonSaveFile.c_str()) &&
+                FSUtils::CheckFile(BaristaIconDataBase.c_str())) {
+                snprintf(buffer, bufferSize, "%s/%s", commonReplacement.c_str(), path);
+                DEBUG_FUNCTION_LINE("Redirect Wii U Menu common path with %s", buffer);
+                return SAVE_STATUS_OK;
+            }
+        }
+    }
+    return real_SAVEGetSharedSaveDataPath(titleID, path, buffer, bufferSize);
+}
+
 extern bool gHideHomebrew;
 extern bool sSDIsMounted;
 DECL_FUNCTION(int32_t, SAVEInit) {
@@ -111,3 +131,4 @@ DECL_FUNCTION(int32_t, SAVEInit) {
 
 WUPS_MUST_REPLACE(SAVEInit, WUPS_LOADER_LIBRARY_NN_SAVE, SAVEInit);
 WUPS_MUST_REPLACE(LoadConsoleAccount__Q2_2nn3actFUc13ACTLoadOptionPCcb, WUPS_LOADER_LIBRARY_NN_ACT, LoadConsoleAccount__Q2_2nn3actFUc13ACTLoadOptionPCcb);
+WUPS_MUST_REPLACE(SAVEGetSharedSaveDataPath, WUPS_LOADER_LIBRARY_NN_SAVE, SAVEGetSharedSaveDataPath);
