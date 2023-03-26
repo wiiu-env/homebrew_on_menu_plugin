@@ -273,35 +273,36 @@ ON_APPLICATION_START() {
     initLogging();
     sSDIsMounted = false;
 
-    CFile file(IGNORE_FILE_PATH, CFile::ReadOnly);
-    if (file.isOpen()) {
-        std::string strBuffer;
-        strBuffer.resize(file.size());
-        file.read((uint8_t *) &strBuffer[0], strBuffer.size());
-        file.close();
-
-        //! remove all windows crap signs
-        size_t position;
-        while (true) {
-            position = strBuffer.find('\r');
-            if (position == std::string::npos) {
-                break;
-            }
-
-            strBuffer.erase(position, 1);
-        }
-
-        gIgnorePatterns = StringTools::StringSplit(strBuffer, "\n");
-
-        // Ignore all lines that start with '#'
-        gIgnorePatterns.erase(std::remove_if(gIgnorePatterns.begin(), gIgnorePatterns.end(), [](auto &line) { return line.starts_with('#'); }), gIgnorePatterns.end());
-    } else {
-        DEBUG_FUNCTION_LINE_ERR("No ignore found");
-    }
-
     if (OSGetTitleID() == 0x0005001010040000L || // Wii U Menu JPN
         OSGetTitleID() == 0x0005001010040100L || // Wii U Menu USA
         OSGetTitleID() == 0x0005001010040200L) { // Wii U Menu EUR
+
+        CFile file(IGNORE_FILE_PATH, CFile::ReadOnly);
+        if (file.isOpen()) {
+            std::string strBuffer;
+            strBuffer.resize(file.size());
+            file.read((uint8_t *) &strBuffer[0], strBuffer.size());
+            file.close();
+
+            //! remove all windows crap signs
+            size_t position;
+            while (true) {
+                position = strBuffer.find('\r');
+                if (position == std::string::npos) {
+                    break;
+                }
+
+                strBuffer.erase(position, 1);
+            }
+
+            gIgnorePatterns = StringTools::StringSplit(strBuffer, "\n");
+
+            // Ignore all lines that start with '#'
+            gIgnorePatterns.erase(std::remove_if(gIgnorePatterns.begin(), gIgnorePatterns.end(), [](auto &line) { return line.starts_with('#'); }), gIgnorePatterns.end());
+        } else {
+            DEBUG_FUNCTION_LINE_ERR("No ignore found");
+        }
+
         gInWiiUMenu = true;
 
         struct stat st {};
