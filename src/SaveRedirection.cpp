@@ -66,9 +66,9 @@ void CopyExistingFiles() {
 }
 
 void initSaveData() {
+    SaveRedirectionCleanUp();
     CopyExistingFiles();
 
-    SaveRedirectionCleanUp();
     DEBUG_FUNCTION_LINE("Setup save redirection: %s -> %s", "/vol/save", "fs:" SAVE_REPLACEMENT_PATH "/save/");
     auto res = ContentRedirection_AddFSLayer(&saveLayer, "homp_save_redirection", "fs:" SAVE_REPLACEMENT_PATH "/save/", FS_LAYER_TYPE_SAVE_REPLACE);
     if (res != CONTENT_REDIRECTION_RESULT_SUCCESS) {
@@ -81,7 +81,7 @@ DECL_FUNCTION(int32_t, LoadConsoleAccount__Q2_2nn3actFUc13ACTLoadOptionPCcb, nn:
     if (result >= 0 && gInWiiUMenu) {
         DEBUG_FUNCTION_LINE("Changed account, we need to init the save data");
         // If the account has changed, we need to init save data for this account
-        CopyExistingFiles();
+        initSaveData();
     }
 
     return result;
