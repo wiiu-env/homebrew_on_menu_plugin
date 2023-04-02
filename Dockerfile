@@ -1,4 +1,4 @@
-FROM ghcr.io/wiiu-env/devkitppc:20230218
+FROM ghcr.io/wiiu-env/devkitppc:20230402
 
 COPY --from=ghcr.io/wiiu-env/wiiupluginsystem:20230316 /artifacts $DEVKITPRO
 COPY --from=ghcr.io/wiiu-env/librpxloader:20230316 /artifacts $DEVKITPRO

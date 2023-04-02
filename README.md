@@ -47,8 +47,9 @@ CoolGame.wuhb
 ```
 
 ## Save data redirection
-In order to preserve the order of homebrew apps even when you run the Wii U Menu without this plugin, this plugin will redirect the Wii U Menu save data to `sd:/wiiu/homebrew_on_menu_plugin`. 
-When no save data is found on the sd card, the current save data is copied from the console, but after that it's never updated.
+In order to preserve the order of homebrew apps even when you run the Wii U Menu without this plugin, this plugin will redirect the Wii U Menu save data to 
+`sd:/wiiu/homebrew_on_menu_plugin/[SerialNumberOfTheConsole]/save`. When no save data is found on the sd card, the current save data is copied from the console,
+but after that it's never updated.
 
 **If the plugin is configured to hide any homebrew except a Homebrew Launcher, the redirection is disabled.**
 

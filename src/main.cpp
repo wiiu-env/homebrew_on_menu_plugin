@@ -6,6 +6,7 @@
 #include "fs/FSUtils.h"
 #include "fs/FileReader.h"
 #include "fs/FileReaderWUHB.h"
+#include "globals.h"
 #include "utils/StringTools.h"
 #include "utils/ini.h"
 #include <algorithm>
@@ -93,6 +94,12 @@ INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
     memset((void *) &gLaunchXML, 0, sizeof(gLaunchXML));
     gHomebrewLaunched = FALSE;
+
+    gSerialId = {};
+    if (!Utils::GetSerialId(gSerialId) || gSerialId.empty()) {
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to get the serial id");
+        OSFatal("Homebrew on Menu Plugin: Failed to get the serial id");
+    }
 
     // Use libwuhbutils.
     WUHBUtilsStatus error;

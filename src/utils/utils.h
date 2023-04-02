@@ -5,6 +5,7 @@
 #include <malloc.h>
 #include <memory>
 #include <mutex>
+#include <string>
 
 uint32_t hash_string(const char *);
 
@@ -30,4 +31,8 @@ bool remove_locked_first_if(std::mutex &mutex, std::forward_list<T, Allocator> &
         oit = it++;
     }
     return false;
+}
+
+namespace Utils {
+    bool GetSerialId(std::string &serialID);
 }

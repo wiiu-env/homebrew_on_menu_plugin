@@ -1,5 +1,7 @@
 #include "SaveRedirection.h"
+#include "globals.h"
 #include <content_redirection/redirection.h>
+#include <coreinit/mcp.h>
 #include <coreinit/title.h>
 #include <fs/FSUtils.h>
 #include <functional>
@@ -13,9 +15,25 @@
 bool gInWiiUMenu __attribute__((section(".data")))        = false;
 CRLayerHandle saveLayer __attribute__((section(".data"))) = 0;
 
+static inline std::string getBaseSavePathLegacy() {
+    return std::string(HOMEBREW_ON_MENU_PLUGIN_DATA_PATH) + "/save";
+}
+
+static inline std::string getBaseSavePathLegacyFS() {
+    return std::string("fs:") + getBaseSavePathLegacy();
+}
+
+static inline std::string getBaseSavePath() {
+    return string_format(HOMEBREW_ON_MENU_PLUGIN_DATA_PATH "/%s/save", gSerialId.c_str());
+}
+
+static inline std::string getBaseSavePathFS() {
+    return "fs:" + getBaseSavePath();
+}
+
 void SaveRedirectionCleanUp() {
     if (saveLayer != 0) {
-        DEBUG_FUNCTION_LINE("Remove save redirection: %s -> %s", "/vol/save", "fs:" SAVE_REPLACEMENT_PATH "/save/");
+        DEBUG_FUNCTION_LINE("Remove save redirection: %s -> %s", "/vol/save", getBaseSavePathFS().c_str());
         auto res = ContentRedirection_RemoveFSLayer(saveLayer);
         if (res != CONTENT_REDIRECTION_RESULT_SUCCESS) {
             DEBUG_FUNCTION_LINE_ERR("Failed to remove save FSLayer");
@@ -29,9 +47,11 @@ void CopyExistingFiles() {
     nn::act::PersistentId persistentId = nn::act::GetPersistentId();
     nn::act::Finalize();
 
-    std::string common         = "fs:" SAVE_REPLACEMENT_PATH "/save/common";
+    std::string common         = getBaseSavePathFS() + "/common";
+    std::string commonLegacy   = getBaseSavePathLegacyFS() + "/common";
     std::string commonOriginal = "fs:/vol/save/common";
-    std::string user           = string_format("fs:" SAVE_REPLACEMENT_PATH "/save/%08X", 0x80000000 | persistentId);
+    std::string user           = string_format("%s/%08X", getBaseSavePathFS().c_str(), 0x80000000 | persistentId);
+    std::string userLegacy     = string_format("%s/%08X", getBaseSavePathLegacyFS().c_str(), 0x80000000 | persistentId);
     std::string userOriginal   = string_format("fs:/vol/save/%08X", 0x80000000 | persistentId);
 
     FSUtils::CreateSubfolder(common.c_str());
@@ -39,28 +59,64 @@ void CopyExistingFiles() {
 
     auto BaristaAccountSaveFilePathNew      = user + "/BaristaAccountSaveFile.dat";
     auto BaristaAccountSaveFilePathOriginal = userOriginal + "/BaristaAccountSaveFile.dat";
+    auto BaristaAccountSaveFilePathLegacy   = userLegacy + "/BaristaAccountSaveFile.dat";
     if (!FSUtils::CheckFile(BaristaAccountSaveFilePathNew.c_str())) {
-        DEBUG_FUNCTION_LINE("Copy %s to %s", BaristaAccountSaveFilePathOriginal.c_str(), BaristaAccountSaveFilePathNew.c_str());
-        if (!FSUtils::copyFile(BaristaAccountSaveFilePathOriginal, BaristaAccountSaveFilePathNew)) {
-            DEBUG_FUNCTION_LINE_ERR("Failed to copy file: %s -> %s", BaristaAccountSaveFilePathOriginal.c_str(), BaristaAccountSaveFilePathNew.c_str());
+        if (FSUtils::CheckFile(BaristaAccountSaveFilePathLegacy.c_str())) {
+            DEBUG_FUNCTION_LINE("Copy %s to %s", BaristaAccountSaveFilePathLegacy.c_str(), BaristaAccountSaveFilePathNew.c_str());
+            if (!FSUtils::copyFile(BaristaAccountSaveFilePathLegacy, BaristaAccountSaveFilePathNew)) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to copy file: %s -> %s", BaristaAccountSaveFilePathLegacy.c_str(), BaristaAccountSaveFilePathNew.c_str());
+            } else {
+                if (remove(BaristaAccountSaveFilePathLegacy.c_str()) < 0) {
+                    DEBUG_FUNCTION_LINE_ERR("Failed to delete %s", BaristaAccountSaveFilePathLegacy.c_str());
+                }
+            }
+        } else {
+            DEBUG_FUNCTION_LINE("Copy %s to %s", BaristaAccountSaveFilePathOriginal.c_str(), BaristaAccountSaveFilePathNew.c_str());
+            if (!FSUtils::copyFile(BaristaAccountSaveFilePathOriginal, BaristaAccountSaveFilePathNew)) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to copy file: %s -> %s", BaristaAccountSaveFilePathOriginal.c_str(), BaristaAccountSaveFilePathNew.c_str());
+            }
         }
     }
 
     auto BaristaCommonSaveFile         = common + "/BaristaCommonSaveFile.dat";
     auto BaristaCommonSaveFileOriginal = commonOriginal + "/BaristaCommonSaveFile.dat";
+    auto BaristaCommonSaveFileLegacy   = commonLegacy + "/BaristaCommonSaveFile.dat";
     if (!FSUtils::CheckFile(BaristaCommonSaveFile.c_str())) {
-        DEBUG_FUNCTION_LINE("Copy %s to %s", BaristaCommonSaveFileOriginal.c_str(), BaristaCommonSaveFile.c_str());
-        if (!FSUtils::copyFile(BaristaCommonSaveFileOriginal, BaristaCommonSaveFile)) {
-            DEBUG_FUNCTION_LINE_ERR("Failed to copy file: %s -> %s", BaristaCommonSaveFileOriginal.c_str(), BaristaCommonSaveFile.c_str());
+        if (FSUtils::CheckFile(BaristaCommonSaveFileLegacy.c_str())) {
+            DEBUG_FUNCTION_LINE("Copy %s to %s", BaristaCommonSaveFileLegacy.c_str(), BaristaCommonSaveFile.c_str());
+            if (!FSUtils::copyFile(BaristaCommonSaveFileLegacy, BaristaCommonSaveFile)) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to copy file: %s -> %s", BaristaCommonSaveFileLegacy.c_str(), BaristaCommonSaveFile.c_str());
+            } else {
+                if (remove(BaristaCommonSaveFileLegacy.c_str()) < 0) {
+                    DEBUG_FUNCTION_LINE_ERR("Failed to delete %s", BaristaCommonSaveFileLegacy.c_str());
+                }
+            }
+        } else {
+            DEBUG_FUNCTION_LINE("Copy %s to %s", BaristaCommonSaveFileOriginal.c_str(), BaristaCommonSaveFile.c_str());
+            if (!FSUtils::copyFile(BaristaCommonSaveFileOriginal, BaristaCommonSaveFile)) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to copy file: %s -> %s", BaristaCommonSaveFileOriginal.c_str(), BaristaCommonSaveFile.c_str());
+            }
         }
     }
 
     auto BaristaIconDataBase         = common + "/BaristaIconDataBase.dat";
     auto BaristaIconDataBaseOriginal = commonOriginal + "/BaristaIconDataBase.dat";
+    auto BaristaIconDataBaseLegacy   = commonLegacy + "/BaristaIconDataBase.dat";
     if (!FSUtils::CheckFile(BaristaIconDataBase.c_str())) {
-        DEBUG_FUNCTION_LINE("Copy %s to %s", BaristaIconDataBaseOriginal.c_str(), BaristaIconDataBase.c_str());
-        if (!FSUtils::copyFile(BaristaIconDataBaseOriginal, BaristaIconDataBase)) {
-            DEBUG_FUNCTION_LINE_ERR("Failed to copy file: %s -> %s", BaristaIconDataBaseOriginal.c_str(), BaristaIconDataBase.c_str());
+        if (FSUtils::CheckFile(BaristaIconDataBaseLegacy.c_str())) {
+            DEBUG_FUNCTION_LINE("Copy %s to %s", BaristaIconDataBaseLegacy.c_str(), BaristaIconDataBase.c_str());
+            if (!FSUtils::copyFile(BaristaIconDataBaseLegacy, BaristaIconDataBase)) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to copy file: %s -> %s", BaristaIconDataBaseLegacy.c_str(), BaristaIconDataBase.c_str());
+            } else {
+                if (remove(BaristaIconDataBaseLegacy.c_str()) < 0) {
+                    DEBUG_FUNCTION_LINE_ERR("Failed to delete %s", BaristaIconDataBaseLegacy.c_str());
+                }
+            }
+        } else {
+            DEBUG_FUNCTION_LINE("Copy %s to %s", BaristaIconDataBaseOriginal.c_str(), BaristaIconDataBase.c_str());
+            if (!FSUtils::copyFile(BaristaIconDataBaseOriginal, BaristaIconDataBase)) {
+                DEBUG_FUNCTION_LINE_ERR("Failed to copy file: %s -> %s", BaristaIconDataBaseOriginal.c_str(), BaristaIconDataBase.c_str());
+            }
         }
     }
 }
@@ -69,8 +125,9 @@ void initSaveData() {
     SaveRedirectionCleanUp();
     CopyExistingFiles();
 
-    DEBUG_FUNCTION_LINE("Setup save redirection: %s -> %s", "/vol/save", "fs:" SAVE_REPLACEMENT_PATH "/save/");
-    auto res = ContentRedirection_AddFSLayer(&saveLayer, "homp_save_redirection", "fs:" SAVE_REPLACEMENT_PATH "/save/", FS_LAYER_TYPE_SAVE_REPLACE);
+    std::string replaceDir = getBaseSavePathFS();
+    DEBUG_FUNCTION_LINE("Setup save redirection: %s -> %s", "/vol/save", replaceDir.c_str());
+    auto res = ContentRedirection_AddFSLayer(&saveLayer, "homp_save_redirection", replaceDir.c_str(), FS_LAYER_TYPE_SAVE_REPLACE);
     if (res != CONTENT_REDIRECTION_RESULT_SUCCESS) {
         DEBUG_FUNCTION_LINE_ERR("Failed to add save FS Layer: %d", res);
     }
@@ -92,13 +149,13 @@ DECL_FUNCTION(SAVEStatus, SAVEGetSharedSaveDataPath, uint64_t titleID, const cha
         titleID == 0x0005001010040100L || // Wii U Menu USA
         titleID == 0x0005001010040200L) { // Wii U Menu EUR
         if (buffer != nullptr) {
-            std::string commonReplacement = SAVE_REPLACEMENT_PATH "/save/common";
+            std::string commonReplacement = getBaseSavePath() + "/common";
             auto BaristaCommonSaveFile    = "fs:" + commonReplacement + "/BaristaCommonSaveFile.dat";
             auto BaristaIconDataBase      = "fs:" + commonReplacement + "/BaristaIconDataBase.dat";
             if (FSUtils::CheckFile(BaristaCommonSaveFile.c_str()) &&
                 FSUtils::CheckFile(BaristaIconDataBase.c_str())) {
                 snprintf(buffer, bufferSize, "%s/%s", commonReplacement.c_str(), path);
-                DEBUG_FUNCTION_LINE("Redirect Wii U Menu common path with %s", buffer);
+                DEBUG_FUNCTION_LINE("Redirect Wii U Menu common path to %s", commonReplacement.c_str());
                 return SAVE_STATUS_OK;
             }
         }
