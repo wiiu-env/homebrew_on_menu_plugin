@@ -2,5 +2,5 @@
 
 #include "version.h"
 
-#define VERSION      "v0.1.5"
+#define VERSION      "v0.1.6"
 #define VERSION_FULL VERSION VERSION_EXTRA
