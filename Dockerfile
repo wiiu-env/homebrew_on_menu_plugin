@@ -1,9 +1,9 @@
-FROM ghcr.io/wiiu-env/devkitppc:20230402
+FROM ghcr.io/wiiu-env/devkitppc:20230621
 
-COPY --from=ghcr.io/wiiu-env/wiiupluginsystem:20230316 /artifacts $DEVKITPRO
-COPY --from=ghcr.io/wiiu-env/librpxloader:20230316 /artifacts $DEVKITPRO
-COPY --from=ghcr.io/wiiu-env/libsdutils:20220903 /artifacts $DEVKITPRO
-COPY --from=ghcr.io/wiiu-env/libwuhbutils:20220904 /artifacts $DEVKITPRO
-COPY --from=ghcr.io/wiiu-env/libcontentredirection:20221010 /artifacts $DEVKITPRO
+COPY --from=ghcr.io/wiiu-env/wiiupluginsystem:20230622 /artifacts $DEVKITPRO
+COPY --from=ghcr.io/wiiu-env/librpxloader:20230621 /artifacts $DEVKITPRO
+COPY --from=ghcr.io/wiiu-env/libsdutils:20230621 /artifacts $DEVKITPRO
+COPY --from=ghcr.io/wiiu-env/libwuhbutils:20230621 /artifacts $DEVKITPRO
+COPY --from=ghcr.io/wiiu-env/libcontentredirection:20230621 /artifacts $DEVKITPRO
 
 WORKDIR project
