@@ -74,7 +74,6 @@ export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
 
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 
-FILELIST	:=	$(shell bash ./filelist.sh)
 CFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
 CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
 SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
@@ -146,11 +145,13 @@ $(OFILES_SRC)	: $(HFILES_BIN)
 #---------------------------------------------------------------------------------
 %.tga.o	%_tga.h  : %.tga
 	@echo $(notdir $<)
-	@bin2s -a 32 $< | $(AS) -o $(@)
+	@$(bin2o)
+
 #---------------------------------------------------------------------------------
 %.h264.o	%_h264.h  : %.h264
 	@echo $(notdir $<)
-	@bin2s -a 32 $< | $(AS) -o $(@)
+	@$(bin2o)
+
 #---------------------------------------------------------------------------------
 
 -include $(DEPENDS)
