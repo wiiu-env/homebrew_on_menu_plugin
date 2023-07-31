@@ -4,7 +4,6 @@
 #include "bootLogoTex_tga.h"
 #include "bootMovie_h264.h"
 #include "fs/CFile.hpp"
-#include "fs/FSUtils.h"
 #include "fs/FileReader.h"
 #include "fs/FileReaderWUHB.h"
 #include "globals.h"
@@ -18,7 +17,6 @@
 #include <coreinit/filesystem.h>
 #include <coreinit/mcp.h>
 #include <coreinit/memory.h>
-#include <coreinit/mutex.h>
 #include <coreinit/systeminfo.h>
 #include <coreinit/title.h>
 #include <cstring>
@@ -27,8 +25,8 @@
 #include <fs/DirList.h>
 #include <malloc.h>
 #include <map>
-#include <mutex>
 #include <nn/acp.h>
+#include <notifications/notifications.h>
 #include <optional>
 #include <rpxloader/rpxloader.h>
 #include <sdutils/sdutils.h>
@@ -122,6 +120,13 @@ INITIALIZE_PLUGIN() {
     if ((error3 = RPXLoader_InitLibrary()) != RPX_LOADER_RESULT_SUCCESS) {
         DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init RPXLoader. Error %s [%d]", RPXLoader_GetStatusStr(error3), error3);
         OSFatal("Homebrew on Menu Plugin: Failed to init RPXLoader.");
+    }
+
+    // Use libnotifications.
+    NotificationModuleStatus error4;
+    if ((error4 = NotificationModule_InitLibrary()) != NOTIFICATION_MODULE_RESULT_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init NotificationModule. Error %s [%d]", NotificationModule_GetStatusStr(error4), error4);
+        OSFatal("Homebrew on Menu Plugin: Failed to init NotificationModule.");
     }
 
     // Open storage to read values

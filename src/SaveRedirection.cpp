@@ -7,6 +7,7 @@
 #include <functional>
 #include <nn/act.h>
 #include <nn/save.h>
+#include <notifications/notifications.h>
 #include <string>
 #include <utils/StringTools.h>
 #include <utils/logger.h>
@@ -186,6 +187,31 @@ DECL_FUNCTION(int32_t, SAVEInit) {
     return res;
 }
 
+DECL_FUNCTION(FSError, FSGetLastErrorCodeForViewer, FSClient *client) {
+    auto res = real_FSGetLastErrorCodeForViewer(client);
+    if (!gInWiiUMenu) {
+        return res;
+    }
+    if ((uint32_t) res == 1503030) {
+        // If we encounter error 1503030 when running the Wii U Menu we probably hit a Wii U Menu save related issue
+        // Either the sd card is write locked or the save on the sd card it corrupted. Let the user now about this..
+
+        std::string deleteHint  = string_format("If not write locked, delete \"sd:" HOMEBREW_ON_MENU_PLUGIN_DATA_PATH_BASE "/%s/save/common/BaristaIconDataBase.dat\".", gSerialId.c_str());
+        std::string deleteHint2 = string_format("If deleting this file doesn't fix the error code, delete this directory: \"sd:" HOMEBREW_ON_MENU_PLUGIN_DATA_PATH_BASE "/%s\".", gSerialId.c_str());
+        NotificationModuleHandle handle;
+
+        NotificationModule_AddDynamicNotification("Caution: This resets the order of application on the Wii U Menu when using Aroma.", &handle);
+        NotificationModule_AddDynamicNotification(deleteHint2.c_str(), &handle);
+        NotificationModule_AddDynamicNotification("", &handle);
+        NotificationModule_AddDynamicNotification(deleteHint.c_str(), &handle);
+        NotificationModule_AddDynamicNotification("", &handle);
+        NotificationModule_AddDynamicNotification("", &handle);
+        NotificationModule_AddDynamicNotification("The SD card appears to be write-locked or the Wii U Menu save on the SD card is corrupted. Check the SD card write lock.", &handle);
+    }
+    return res;
+}
+
 WUPS_MUST_REPLACE(SAVEInit, WUPS_LOADER_LIBRARY_NN_SAVE, SAVEInit);
 WUPS_MUST_REPLACE(LoadConsoleAccount__Q2_2nn3actFUc13ACTLoadOptionPCcb, WUPS_LOADER_LIBRARY_NN_ACT, LoadConsoleAccount__Q2_2nn3actFUc13ACTLoadOptionPCcb);
+WUPS_MUST_REPLACE_FOR_PROCESS(FSGetLastErrorCodeForViewer, WUPS_LOADER_LIBRARY_COREINIT, FSGetLastErrorCodeForViewer, WUPS_FP_TARGET_PROCESS_WII_U_MENU);
 WUPS_MUST_REPLACE(SAVEGetSharedSaveDataPath, WUPS_LOADER_LIBRARY_NN_SAVE, SAVEGetSharedSaveDataPath);
