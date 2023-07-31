@@ -13,6 +13,7 @@ This plugin allows you to boot homebrew directly from your Wii U Menu.
 4. Requires the [WUHBUtilsModule](https://github.com/wiiu-env/WUHBUtilsModule) in `sd:/wiiu/environments/[ENVIRONMENT]/modules`.
 5. Requires the [ContentRedirectionModule](https://github.com/wiiu-env/ContentRedirectionModule) in `sd:/wiiu/environments/[ENVIRONMENT]/modules`.
 6. Requires the [SDHotSwapModule](https://github.com/wiiu-env/SDHotSwapModule) in `sd:/wiiu/environments/[ENVIRONMENT]/modules`.
+7. Requires the [NotificationModule](https://github.com/wiiu-env/NotificationModule) in `sd:/wiiu/environments/[ENVIRONMENT]/modules`.
 
 ## Usage
 
