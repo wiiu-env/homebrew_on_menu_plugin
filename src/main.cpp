@@ -79,9 +79,14 @@ WUPS_USE_STORAGE("homebrew_on_menu"); // Use the storage API
 #define HOMEBREW_LAUNCHER_PATH               HOMEBREW_APPS_DIRECTORY "/" HOMEBREW_LAUNCHER_FILENAME
 #define HOMEBREW_LAUNCHER_PATH2              HOMEBREW_APPS_DIRECTORY "/" HOMEBREW_LAUNCHER_OPTIONAL_DIRECTORY "/" HOMEBREW_LAUNCHER_FILENAME
 
-bool gHideHomebrew              = false;
-bool gPreferWUHBOverRPX         = true;
-bool gHideAllRPX                = false;
+
+#define DEFAULT_HIDE_HOMEBREW_VALUE          false
+#define DEFAULT_PREFER_WUHB_OVER_RPX_VALUE   true
+#define DEFAULT_HIDE_ALL_RPX_VALUE           false
+bool gHideHomebrew      = DEFAULT_HIDE_HOMEBREW_VALUE;
+bool gPreferWUHBOverRPX = DEFAULT_PREFER_WUHB_OVER_RPX_VALUE;
+bool gHideAllRPX        = DEFAULT_HIDE_ALL_RPX_VALUE;
+
 bool prevHideValue              = false;
 bool prevPreferWUHBOverRPXValue = false;
 bool prevHideAllRPX             = false;
@@ -89,6 +94,9 @@ bool prevHideAllRPX             = false;
 bool gHomebrewLauncherExists = false;
 
 std::vector<std::string> gIgnorePatterns;
+
+WUPSConfigAPICallbackStatus ConfigMenuOpenedCallback(WUPSConfigCategoryHandle rootHandle);
+void ConfigMenuClosedCallback();
 
 INITIALIZE_PLUGIN() {
     memset((void *) &current_launched_title_info, 0, sizeof(current_launched_title_info));
@@ -129,55 +137,36 @@ INITIALIZE_PLUGIN() {
         OSFatal("Homebrew on Menu Plugin: Failed to init NotificationModule.");
     }
 
-    // Open storage to read values
-    WUPSStorageError storageRes = WUPS_OpenStorage();
-    if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Failed to open storage %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
-    } else {
-        // Try to get value from storage
-        if ((storageRes = WUPS_GetBool(nullptr, HIDE_HOMEBREW_STRING, &gHideHomebrew)) == WUPS_STORAGE_ERROR_NOT_FOUND) {
-            // Add the value to the storage if it's missing.
-            storageRes = WUPS_StoreBool(nullptr, HIDE_HOMEBREW_STRING, gHideHomebrew);
-            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
-                DEBUG_FUNCTION_LINE_ERR("Failed to store bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
-            }
-        } else {
-            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
-                DEBUG_FUNCTION_LINE_ERR("Failed to get bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
-            }
-        }
-
-        if ((storageRes = WUPS_GetBool(nullptr, PREFER_WUHB_OVER_RPX_STRING, &gPreferWUHBOverRPX)) == WUPS_STORAGE_ERROR_NOT_FOUND) {
-            // Add the value to the storage if it's missing.
-            storageRes = WUPS_StoreBool(nullptr, PREFER_WUHB_OVER_RPX_STRING, gPreferWUHBOverRPX);
-            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
-                DEBUG_FUNCTION_LINE_ERR("Failed to store bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
-            }
-        } else {
-            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
-                DEBUG_FUNCTION_LINE_ERR("Failed to get bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
-            }
-        }
-
-        if ((storageRes = WUPS_GetBool(nullptr, HIDE_ALL_RPX_STRING, &gHideAllRPX)) == WUPS_STORAGE_ERROR_NOT_FOUND) {
-            // Add the value to the storage if it's missing.
-            storageRes = WUPS_StoreBool(nullptr, HIDE_ALL_RPX_STRING, gHideAllRPX);
-            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
-                DEBUG_FUNCTION_LINE_ERR("Failed to store bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
-            }
-        } else {
-            if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
-                DEBUG_FUNCTION_LINE_ERR("Failed to get bool %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
-            }
-        }
-
-        prevHideValue              = gHideHomebrew;
-        prevPreferWUHBOverRPXValue = gPreferWUHBOverRPX;
-        prevHideAllRPX             = gHideAllRPX;
-
-        // Close storage
-        WUPS_CloseStorage();
+    WUPSConfigAPIOptionsV1 configOptions = {.name = "Homebrew On Menu Plugin"};
+    if (WUPSConfigAPI_Init(configOptions, ConfigMenuOpenedCallback, ConfigMenuClosedCallback) != WUPSCONFIG_API_RESULT_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to init config api");
     }
+
+    WUPSStorageError storageError;
+    storageError = WUPSStorageAPI::GetOrStoreDefault(HIDE_HOMEBREW_STRING, gHideHomebrew, DEFAULT_HIDE_HOMEBREW_VALUE);
+    if (storageError != WUPS_STORAGE_ERROR_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to get or set default bool: %s", WUPSStorageAPI::GetStatusStr(storageError).data());
+    }
+
+    storageError = WUPSStorageAPI::GetOrStoreDefault(PREFER_WUHB_OVER_RPX_STRING, gPreferWUHBOverRPX, DEFAULT_PREFER_WUHB_OVER_RPX_VALUE);
+    if (storageError != WUPS_STORAGE_ERROR_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to get or set default bool: %s", WUPSStorageAPI::GetStatusStr(storageError).data());
+    }
+
+    storageError = WUPSStorageAPI::GetOrStoreDefault(HIDE_ALL_RPX_STRING, gHideAllRPX, DEFAULT_HIDE_ALL_RPX_VALUE);
+    if (storageError != WUPS_STORAGE_ERROR_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to get or set default bool: %s", WUPSStorageAPI::GetStatusStr(storageError).data());
+    }
+
+    // save storage
+    storageError = WUPSStorageAPI::SaveStorage();
+    if (storageError != WUPS_STORAGE_ERROR_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to save storage: %s", WUPSStorageAPI::GetStatusStr(storageError).data());
+    }
+
+    prevHideValue              = gHideHomebrew;
+    prevPreferWUHBOverRPXValue = gPreferWUHBOverRPX;
+    prevHideAllRPX             = gHideAllRPX;
 }
 
 void hideHomebrewChanged(ConfigItemBoolean *item, bool newValue) {
@@ -185,9 +174,9 @@ void hideHomebrewChanged(ConfigItemBoolean *item, bool newValue) {
     gHideHomebrew = newValue;
 
     // If the value has changed, we store it in the storage.
-    WUPSStorageError storageRes = WUPS_StoreBool(nullptr, HIDE_HOMEBREW_STRING, gHideHomebrew);
+    WUPSStorageError storageRes = WUPSStorageAPI::Store(HIDE_HOMEBREW_STRING, gHideHomebrew);
     if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Failed to store bool: %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+        DEBUG_FUNCTION_LINE_ERR("Failed to store bool: %s", WUPSStorageAPI::GetStatusStr(storageRes).data());
     }
 }
 
@@ -196,9 +185,9 @@ void preferWUHBOverRPXChanged(ConfigItemBoolean *item, bool newValue) {
     gPreferWUHBOverRPX = newValue;
 
     // If the value has changed, we store it in the storage.
-    WUPSStorageError storageRes = WUPS_StoreBool(nullptr, PREFER_WUHB_OVER_RPX_STRING, gPreferWUHBOverRPX);
+    WUPSStorageError storageRes = WUPSStorageAPI::Store(PREFER_WUHB_OVER_RPX_STRING, gPreferWUHBOverRPX);
     if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Failed to store bool: %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+        DEBUG_FUNCTION_LINE_ERR("Failed to store bool: %s", WUPSStorageAPI::GetStatusStr(storageRes).data());
     }
 }
 
@@ -207,46 +196,49 @@ void hideAllRPXChanged(ConfigItemBoolean *item, bool newValue) {
     gHideAllRPX = newValue;
 
     // If the value has changed, we store it in the storage.
-    WUPSStorageError storageRes = WUPS_StoreBool(nullptr, HIDE_ALL_RPX_STRING, gHideAllRPX);
+    WUPSStorageError storageRes = WUPSStorageAPI::Store(HIDE_ALL_RPX_STRING, gHideAllRPX);
     if (storageRes != WUPS_STORAGE_ERROR_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Failed to store bool: %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+        DEBUG_FUNCTION_LINE_ERR("Failed to store bool: %s", WUPSStorageAPI::GetStatusStr(storageRes).data());
     }
 }
 
-WUPS_GET_CONFIG() {
-    // We open the storage so we can persist the configuration the user did.
-    WUPSStorageError storageRes;
-    DEBUG_FUNCTION_LINE_ERR("In WUPS_GET_CONFIG");
-    if ((storageRes = WUPS_OpenStorage()) != WUPS_STORAGE_ERROR_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Failed to open storage %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
-        return 0;
+WUPSConfigAPICallbackStatus ConfigMenuOpenedCallback(WUPSConfigCategoryHandle rootHandle) {
+    try {
+        WUPSConfigCategory root = WUPSConfigCategory(rootHandle);
+        auto features           = WUPSConfigCategory::Create("Features");
+
+
+        features.add(WUPSConfigItemBoolean::Create(HIDE_HOMEBREW_STRING,
+                                                   gHomebrewLauncherExists ? "Hide all homebrew except Homebrew Launcher" : "Hide all homebrew",
+                                                   DEFAULT_HIDE_HOMEBREW_VALUE, gHideHomebrew,
+                                                   &hideHomebrewChanged));
+
+        features.add(WUPSConfigItemBoolean::Create(PREFER_WUHB_OVER_RPX_STRING,
+                                                   "Prefer .wuhb over .rpx",
+                                                   DEFAULT_PREFER_WUHB_OVER_RPX_VALUE, gPreferWUHBOverRPX,
+                                                   &preferWUHBOverRPXChanged));
+
+        features.add(WUPSConfigItemBoolean::Create(HIDE_ALL_RPX_STRING,
+                                                   "Hide all .rpx",
+                                                   DEFAULT_HIDE_ALL_RPX_VALUE, gHideAllRPX,
+                                                   &hideAllRPXChanged));
+
+    } catch (std::exception &e) {
+        OSReport("Exception T_T : %s\n", e.what());
+        return WUPSCONFIG_API_CALLBACK_RESULT_ERROR;
     }
-
-    WUPSConfigHandle config;
-    WUPSConfig_CreateHandled(&config, "Homebrew on Menu");
-
-    WUPSConfigCategoryHandle cat;
-    WUPSConfig_AddCategoryByNameHandled(config, "Features", &cat);
-
-    WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, HIDE_HOMEBREW_STRING,
-                                               gHomebrewLauncherExists ? "Hide all homebrew except Homebrew Launcher" : "Hide all homebrew",
-                                               gHideHomebrew, &hideHomebrewChanged);
-
-    WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, PREFER_WUHB_OVER_RPX_STRING, "Prefer .wuhb over .rpx", gPreferWUHBOverRPX, &preferWUHBOverRPXChanged);
-    WUPSConfigItemBoolean_AddToCategoryHandled(config, cat, HIDE_ALL_RPX_STRING, "Hide all .rpx", gHideAllRPX, &hideAllRPXChanged);
-
-    return config;
+    return WUPSCONFIG_API_CALLBACK_RESULT_SUCCESS;
 }
 
 bool sSDUtilsInitDone = false;
 bool sSDIsMounted     = false;
 bool sTitleRebooting  = false;
 
-WUPS_CONFIG_CLOSED() {
+void ConfigMenuClosedCallback() {
     // Save all changes
-    WUPSStorageError storageRes;
-    if ((storageRes = WUPS_CloseStorage()) != WUPS_STORAGE_ERROR_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Failed to close storage %s (%d)", WUPS_GetStorageStatusStr(storageRes), storageRes);
+    auto saveErr = WUPSStorageAPI::SaveStorage();
+    if (saveErr != WUPS_STORAGE_ERROR_SUCCESS) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to save storage: %s", WUPSStorageAPI::GetStatusStr(saveErr).data());
     }
 
     if (prevHideValue != gHideHomebrew || prevPreferWUHBOverRPXValue != gPreferWUHBOverRPX || prevHideAllRPX != gHideAllRPX) {
