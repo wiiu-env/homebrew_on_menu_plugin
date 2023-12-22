@@ -223,6 +223,7 @@ WUPSConfigAPICallbackStatus ConfigMenuOpenedCallback(WUPSConfigCategoryHandle ro
                                                    DEFAULT_HIDE_ALL_RPX_VALUE, gHideAllRPX,
                                                    &hideAllRPXChanged));
 
+        root.add(std::move(features));
     } catch (std::exception &e) {
         OSReport("Exception T_T : %s\n", e.what());
         return WUPSCONFIG_API_CALLBACK_RESULT_ERROR;
