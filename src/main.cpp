@@ -43,7 +43,7 @@ typedef struct ACPMetaData {
     char bootlogo[28604];
 } ACPMetaData;
 
-WUPS_PLUGIN_NAME("Homebrew in Wii U menu");
+WUPS_PLUGIN_NAME("Homebrew on Wii U menu");
 WUPS_PLUGIN_DESCRIPTION("Allows the user to load homebrew from the Wii U menu");
 WUPS_PLUGIN_VERSION(VERSION_FULL);
 WUPS_PLUGIN_AUTHOR("Maschell");
@@ -52,9 +52,9 @@ WUPS_PLUGIN_LICENSE("GPL");
 #define UPPER_TITLE_ID_HOMEBREW 0x0005000F
 #define TITLE_ID_HOMEBREW_MASK  (((uint64_t) UPPER_TITLE_ID_HOMEBREW) << 32)
 
-ACPMetaXml gLaunchXML __attribute__((section(".data")));
-MCPTitleListType current_launched_title_info __attribute__((section(".data")));
-BOOL gHomebrewLaunched __attribute__((section(".data")));
+ACPMetaXml gLaunchXML                        = {};
+MCPTitleListType current_launched_title_info = {};
+BOOL gHomebrewLaunched                       = {};
 
 std::mutex fileInfosMutex;
 std::forward_list<std::shared_ptr<FileInfos>> fileInfos;
@@ -106,38 +106,38 @@ INITIALIZE_PLUGIN() {
     gSerialId = {};
     if (!Utils::GetSerialId(gSerialId) || gSerialId.empty()) {
         DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to get the serial id");
-        OSFatal("Homebrew on Menu Plugin: Failed to get the serial id");
+        OSFatal("Homebrew on menu plugin: Failed to get the serial id");
     }
 
     // Use libwuhbutils.
     WUHBUtilsStatus error;
     if ((error = WUHBUtils_InitLibrary()) != WUHB_UTILS_RESULT_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init WUHBUtils. Error %s [%d]", WUHBUtils_GetStatusStr(error), error);
-        OSFatal("Homebrew on Menu Plugin: Failed to init WUHBUtils.");
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on menu plugin: Failed to init WUHBUtils. Error %s [%d]", WUHBUtils_GetStatusStr(error), error);
+        OSFatal("Homebrew on menu plugin: Failed to init WUHBUtils.");
     }
 
     // Use libcontentredirection.
     ContentRedirectionStatus error2;
     if ((error2 = ContentRedirection_InitLibrary()) != CONTENT_REDIRECTION_RESULT_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init ContentRedirection. Error %s [%d]", ContentRedirection_GetStatusStr(error2), error2);
-        OSFatal("Homebrew on Menu Plugin: Failed to init ContentRedirection.");
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on menu plugin: Failed to init ContentRedirection. Error %s [%d]", ContentRedirection_GetStatusStr(error2), error2);
+        OSFatal("Homebrew on menu plugin: Failed to init ContentRedirection.");
     }
 
     // Use librpxloader.
     RPXLoaderStatus error3;
     if ((error3 = RPXLoader_InitLibrary()) != RPX_LOADER_RESULT_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init RPXLoader. Error %s [%d]", RPXLoader_GetStatusStr(error3), error3);
-        OSFatal("Homebrew on Menu Plugin: Failed to init RPXLoader.");
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on menu plugin: Failed to init RPXLoader. Error %s [%d]", RPXLoader_GetStatusStr(error3), error3);
+        OSFatal("Homebrew on menu plugin: Failed to init RPXLoader.");
     }
 
     // Use libnotifications.
     NotificationModuleStatus error4;
     if ((error4 = NotificationModule_InitLibrary()) != NOTIFICATION_MODULE_RESULT_SUCCESS) {
-        DEBUG_FUNCTION_LINE_ERR("Homebrew on Menu Plugin: Failed to init NotificationModule. Error %s [%d]", NotificationModule_GetStatusStr(error4), error4);
-        OSFatal("Homebrew on Menu Plugin: Failed to init NotificationModule.");
+        DEBUG_FUNCTION_LINE_ERR("Homebrew on menu plugin: Failed to init NotificationModule. Error %s [%d]", NotificationModule_GetStatusStr(error4), error4);
+        OSFatal("Homebrew on menu plugin: Failed to init NotificationModule.");
     }
 
-    WUPSConfigAPIOptionsV1 configOptions = {.name = "Homebrew On Menu Plugin"};
+    WUPSConfigAPIOptionsV1 configOptions = {.name = "Homebrew On Wii U Menu Plugin"};
     if (WUPSConfigAPI_Init(configOptions, ConfigMenuOpenedCallback, ConfigMenuClosedCallback) != WUPSCONFIG_API_RESULT_SUCCESS) {
         DEBUG_FUNCTION_LINE_ERR("Failed to init config api");
     }
@@ -205,27 +205,23 @@ void hideAllRPXChanged(ConfigItemBoolean *item, bool newValue) {
 WUPSConfigAPICallbackStatus ConfigMenuOpenedCallback(WUPSConfigCategoryHandle rootHandle) {
     try {
         WUPSConfigCategory root = WUPSConfigCategory(rootHandle);
-        auto features           = WUPSConfigCategory::Create("Features");
 
+        root.add(WUPSConfigItemBoolean::Create(HIDE_HOMEBREW_STRING,
+                                               gHomebrewLauncherExists ? "Hide all homebrew except Homebrew Launcher" : "Hide all homebrew",
+                                               DEFAULT_HIDE_HOMEBREW_VALUE, gHideHomebrew,
+                                               &hideHomebrewChanged));
 
-        features.add(WUPSConfigItemBoolean::Create(HIDE_HOMEBREW_STRING,
-                                                   gHomebrewLauncherExists ? "Hide all homebrew except Homebrew Launcher" : "Hide all homebrew",
-                                                   DEFAULT_HIDE_HOMEBREW_VALUE, gHideHomebrew,
-                                                   &hideHomebrewChanged));
+        root.add(WUPSConfigItemBoolean::Create(PREFER_WUHB_OVER_RPX_STRING,
+                                               "Prefer .wuhb over .rpx",
+                                               DEFAULT_PREFER_WUHB_OVER_RPX_VALUE, gPreferWUHBOverRPX,
+                                               &preferWUHBOverRPXChanged));
 
-        features.add(WUPSConfigItemBoolean::Create(PREFER_WUHB_OVER_RPX_STRING,
-                                                   "Prefer .wuhb over .rpx",
-                                                   DEFAULT_PREFER_WUHB_OVER_RPX_VALUE, gPreferWUHBOverRPX,
-                                                   &preferWUHBOverRPXChanged));
-
-        features.add(WUPSConfigItemBoolean::Create(HIDE_ALL_RPX_STRING,
-                                                   "Hide all .rpx",
-                                                   DEFAULT_HIDE_ALL_RPX_VALUE, gHideAllRPX,
-                                                   &hideAllRPXChanged));
-
-        root.add(std::move(features));
+        root.add(WUPSConfigItemBoolean::Create(HIDE_ALL_RPX_STRING,
+                                               "Hide all .rpx",
+                                               DEFAULT_HIDE_ALL_RPX_VALUE, gHideAllRPX,
+                                               &hideAllRPXChanged));
     } catch (std::exception &e) {
-        OSReport("Exception T_T : %s\n", e.what());
+        OSReport("Exception: %s\n", e.what());
         return WUPSCONFIG_API_CALLBACK_RESULT_ERROR;
     }
     return WUPSCONFIG_API_CALLBACK_RESULT_SUCCESS;
@@ -307,7 +303,7 @@ ON_APPLICATION_START() {
             // Ignore all lines that start with '#'
             gIgnorePatterns.erase(std::remove_if(gIgnorePatterns.begin(), gIgnorePatterns.end(), [](auto &line) { return line.starts_with('#'); }), gIgnorePatterns.end());
         } else {
-            DEBUG_FUNCTION_LINE_ERR("No ignore found");
+            DEBUG_FUNCTION_LINE_INFO("No ignore found");
         }
 
         gInWiiUMenu = true;
