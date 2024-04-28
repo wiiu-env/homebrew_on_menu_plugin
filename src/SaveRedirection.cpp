@@ -80,11 +80,16 @@ void initSaveData() {
     SaveRedirectionCleanUp();
     CopyExistingFiles();
 
-    std::string replaceDir = getBaseSavePathFS();
-    DEBUG_FUNCTION_LINE("Setup save redirection: %s -> %s", "/vol/save", replaceDir.c_str());
-    auto res = ContentRedirection_AddFSLayer(&saveLayer, "homp_save_redirection", replaceDir.c_str(), FS_LAYER_TYPE_SAVE_REPLACE_IGNORE_VOL_SAVE_COMMON);
+    nn::act::Initialize();
+    nn::act::PersistentId persistentId = nn::act::GetPersistentId();
+    nn::act::Finalize();
+
+    std::string replaceDir = string_format("%s/%08X", getBaseSavePathFS().c_str(), 0x80000000 | persistentId);
+    DEBUG_FUNCTION_LINE("Setup save redirection: %s -> %s", string_format("/vol/save/%08X", 0x80000000 | persistentId), replaceDir.c_str());
+    auto res = ContentRedirection_AddFSLayer(&saveLayer, "homp_save_redirection", replaceDir.c_str(), FS_LAYER_TYPE_SAVE_REPLACE_FOR_CURRENT_USER);
     if (res != CONTENT_REDIRECTION_RESULT_SUCCESS) {
         DEBUG_FUNCTION_LINE_ERR("Failed to add save FS Layer: %d", res);
+        NotificationModule_AddErrorNotification("homebrew on menu plugin: Failed to initialize /vol/save redirection");
     }
 }
 
