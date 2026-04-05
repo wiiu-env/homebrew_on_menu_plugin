@@ -85,7 +85,7 @@ void initSaveData() {
     nn::act::Finalize();
 
     std::string replaceDir = string_format("%s/%08X", getBaseSavePathFS().c_str(), 0x80000000 | persistentId);
-    DEBUG_FUNCTION_LINE("Setup save redirection: %s -> %s", string_format("/vol/save/%08X", 0x80000000 | persistentId), replaceDir.c_str());
+    DEBUG_FUNCTION_LINE("Setup save redirection: %s -> %s", string_format("/vol/save/%08X", 0x80000000 | persistentId).c_str(), replaceDir.c_str());
     auto res = ContentRedirection_AddFSLayer(&saveLayer, "homp_save_redirection", replaceDir.c_str(), FS_LAYER_TYPE_SAVE_REPLACE_FOR_CURRENT_USER);
     if (res != CONTENT_REDIRECTION_RESULT_SUCCESS) {
         DEBUG_FUNCTION_LINE_ERR("Failed to add save FS Layer: %d", res);
