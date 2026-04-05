@@ -546,16 +546,19 @@ void readCustomTitlesFromSD() {
 #define TMP_BUNDLE_NAME "romfscheck"
 
             if (WUHBUtils_MountBundle(TMP_BUNDLE_NAME, filePath.c_str(), BundleSource_FileDescriptor, &result) == WUHB_UTILS_RESULT_SUCCESS && result >= 0) {
-                fileInfo->isBundle = true;
-                uint8_t *buffer;
-                uint32_t bufferSize;
+                fileInfo->isBundle  = true;
+                uint8_t *buffer     = nullptr;
+                uint32_t bufferSize = 0;
 
                 auto readRes = WUHBUtils_ReadWholeFile(TMP_BUNDLE_NAME ":/meta/meta.ini", &buffer, &bufferSize);
                 if (readRes == WUHB_UTILS_RESULT_SUCCESS) {
-                    buffer[bufferSize - 1] = '\0';
-                    if (ini_parse_string((const char *) buffer, handler, &fileInfo) < 0) {
-                        DEBUG_FUNCTION_LINE_ERR("Failed to parse meta.ini");
+                    if (bufferSize > 0) {
+                        std::string iniData(reinterpret_cast<char *>(buffer), bufferSize);
+                        if (ini_parse_string(iniData.c_str(), handler, &fileInfo) < 0) {
+                            DEBUG_FUNCTION_LINE_ERR("Failed to parse meta.ini");
+                        }
                     }
+
                     free(buffer);
                     buffer = nullptr;
                 } else {
