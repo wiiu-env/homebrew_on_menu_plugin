@@ -51,8 +51,8 @@ public:
             return true;
         }
         int32_t outRes = -1;
-        if (WUHBUtils_UnmountBundle(mountPath.c_str(), &outRes) != WUHB_UTILS_RESULT_SUCCESS || outRes < 0) {
-            DEBUG_FUNCTION_LINE_ERR("Failed to unmount bundle: %s", mountPath.c_str());
+        if (auto res = WUHBUtils_UnmountBundle(mountPath.c_str(), &outRes); (res != WUHB_UTILS_RESULT_SUCCESS || outRes < 0)) {
+            DEBUG_FUNCTION_LINE_ERR("Failed to unmount bundle: \"%s\" %s %d", mountPath.c_str(), WUHBUtils_GetStatusStr(res), outRes);
             return false;
         } else {
             DEBUG_FUNCTION_LINE_VERBOSE("Successfully unmounted bundle %s", this->mountPath.c_str());
